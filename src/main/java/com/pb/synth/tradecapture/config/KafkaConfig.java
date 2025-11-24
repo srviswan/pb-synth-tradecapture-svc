@@ -1,6 +1,5 @@
 package com.pb.synth.tradecapture.config;
 
-import com.pb.synth.tradecapture.proto.TradeCaptureProto;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -63,6 +62,10 @@ public class KafkaConfig {
         ConcurrentKafkaListenerContainerFactory<String, byte[]> factory = 
             new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
+        
+        // Set concurrency for parallel partition processing
+        // Each partition will be processed by a separate thread
+        factory.setConcurrency(3); // Process up to 3 partitions concurrently
         
         // Manual acknowledgment for better control
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);

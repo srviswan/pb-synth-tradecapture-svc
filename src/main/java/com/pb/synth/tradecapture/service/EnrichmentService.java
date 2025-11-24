@@ -6,10 +6,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Service for enriching trade data with reference data.
+ * Supports parallel enrichment operations.
  */
 @Service
 @RequiredArgsConstructor
@@ -21,24 +24,44 @@ public class EnrichmentService {
 
     /**
      * Enrich trade data with security and account information.
+     * Uses parallel enrichment for better performance.
      */
     public EnrichmentResult enrich(TradeCaptureRequest request) {
         EnrichmentStatus status = EnrichmentStatus.COMPLETE;
-        Map<String, Object> enrichedData = Map.of(); // Simplified for now
+        Map<String, Object> enrichedData = new HashMap<>();
         
         try {
-            // Enrich with security data
-            var securityData = securityMasterServiceClient.lookupSecurity(request.getSecurityId());
+            // Parallel enrichment - fetch security and account data concurrently
+            CompletableFuture<Map<String, Object>> securityFuture = 
+                securityMasterServiceClient.lookupSecurityAsync(request.getSecurityId())
+                    .thenApply(opt -> opt.orElse(Map.of()));
+            
+            CompletableFuture<Map<String, Object>> accountFuture = 
+                accountServiceClient.lookupAccountAsync(request.getAccountId(), request.getBookId())
+                    .thenApply(opt -> opt.orElse(Map.of()));
+            
+            // Wait for both to complete
+            CompletableFuture.allOf(securityFuture, accountFuture).join();
+            
+            Map<String, Object> securityData = securityFuture.getNow(Map.of());
+            Map<String, Object> accountData = accountFuture.getNow(Map.of());
+            
             if (securityData.isEmpty()) {
                 log.warn("Security not found: {}", request.getSecurityId());
                 status = EnrichmentStatus.PARTIAL;
+            } else {
+                enrichedData.put("security", securityData);
             }
             
-            // Enrich with account data
-            var accountData = accountServiceClient.lookupAccount(request.getAccountId(), request.getBookId());
             if (accountData.isEmpty()) {
                 log.warn("Account not found: {} / {}", request.getAccountId(), request.getBookId());
                 status = EnrichmentStatus.PARTIAL;
+            } else {
+                enrichedData.put("account", accountData);
+            }
+            
+            if (securityData.isEmpty() && accountData.isEmpty()) {
+                status = EnrichmentStatus.FAILED;
             }
             
             return EnrichmentResult.builder()

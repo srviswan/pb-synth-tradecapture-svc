@@ -80,24 +80,9 @@ public class KafkaTradeMessageConsumer implements TradeMessageConsumer {
         } catch (Exception e) {
             log.error("Error processing trade message from Kafka: topic={}, partition={}, offset={}", 
                 topic, partition, offset, e);
-            
-            // Convert to TradeCaptureRequest for DLQ
-            try {
-                TradeCaptureProto.TradeCaptureMessage protoMessage = 
-                    TradeCaptureProto.TradeCaptureMessage.parseFrom(messageBytes);
-                TradeCaptureRequest request = messageConverter.toTradeCaptureRequest(protoMessage);
-                
-                // Publish to DLQ
-                dlqPublisher.publishToDLQ(request, e);
-            } catch (Exception dlqError) {
-                log.error("Failed to publish to DLQ, original error: {}", e.getMessage(), dlqError);
-            }
-            
-            // Don't throw - acknowledge to prevent infinite retries
-            // DLQ will handle retry manually
-            if (acknowledgment != null) {
-                acknowledgment.acknowledge();
-            }
+            // In production, you might want to send to DLQ or retry
+            // For now, we'll let Kafka handle retries via consumer configuration
+            throw new RuntimeException("Failed to process Kafka message", e);
         }
     }
     

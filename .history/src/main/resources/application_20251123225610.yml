@@ -138,24 +138,6 @@ messaging:
     exchanges:
       output: trade-capture-exchange
 
-# Parallel processing configuration
-processing:
-  parallelism:
-    core-pool-size: ${PROCESSING_CORE_POOL_SIZE:10}
-    max-pool-size: ${PROCESSING_MAX_POOL_SIZE:20}
-    queue-capacity: ${PROCESSING_QUEUE_CAPACITY:100}
-    thread-name-prefix: ${PROCESSING_THREAD_NAME_PREFIX:partition-processor-}
-
-# Partition locking configuration
-partition-lock:
-  timeout: ${PARTITION_LOCK_TIMEOUT:5m}
-  wait-timeout: ${PARTITION_LOCK_WAIT_TIMEOUT:30s}
-
-# Sequence number validation
-sequence-validation:
-  enabled: ${SEQUENCE_VALIDATION_ENABLED:true}
-  cache-ttl: ${SEQUENCE_CACHE_TTL:24h}
-
 # Publishing configuration
 publishing:
   subscribers:
