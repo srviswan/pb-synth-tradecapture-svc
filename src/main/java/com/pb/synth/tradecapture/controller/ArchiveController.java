@@ -7,7 +7,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.ZonedDateTime;
+import java.time.LocalDateTime;
 
 /**
  * REST controller for archive operations.
@@ -34,8 +34,8 @@ public class ArchiveController {
      */
     @PostMapping("/date-range")
     public ResponseEntity<ArchiveService.ArchiveResult> archiveByDateRange(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) ZonedDateTime startDate,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) ZonedDateTime endDate) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
         
         ArchiveService.ArchiveResult result = archiveService.archiveByDateRange(startDate, endDate);
         return ResponseEntity.ok(result);

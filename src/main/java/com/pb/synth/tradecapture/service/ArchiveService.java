@@ -11,7 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.ZonedDateTime;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -36,7 +36,7 @@ public class ArchiveService {
         // Archive SwapBlotter
         swapBlotterRepository.findByTradeId(tradeId).ifPresent(entity -> {
             entity.setArchiveFlag(true);
-            entity.setUpdatedAt(ZonedDateTime.now());
+            entity.setUpdatedAt(LocalDateTime.now());
             swapBlotterRepository.save(entity);
         });
         
@@ -45,7 +45,7 @@ public class ArchiveService {
             partitionStateRepository.findByPartitionKey(blotter.getPartitionKey())
                 .ifPresent(state -> {
                     state.setArchiveFlag(true);
-                    state.setUpdatedAt(ZonedDateTime.now());
+                    state.setUpdatedAt(LocalDateTime.now());
                     partitionStateRepository.save(state);
                 });
         });
@@ -53,7 +53,7 @@ public class ArchiveService {
         // Archive idempotency record
         idempotencyRepository.findByTradeId(tradeId).ifPresent(record -> {
             record.setArchiveFlag(true);
-            record.setCompletedAt(ZonedDateTime.now());
+            record.setCompletedAt(LocalDateTime.now());
             idempotencyRepository.save(record);
         });
         
@@ -64,7 +64,7 @@ public class ArchiveService {
      * Archive records by date range.
      */
     @Transactional
-    public ArchiveResult archiveByDateRange(ZonedDateTime startDate, ZonedDateTime endDate) {
+    public ArchiveResult archiveByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
         log.info("Archiving records from {} to {}", startDate, endDate);
         
         int swapBlotterCount = 0;
@@ -79,7 +79,7 @@ public class ArchiveService {
         
         for (SwapBlotterEntity entity : swapBlotters) {
             entity.setArchiveFlag(true);
-            entity.setUpdatedAt(ZonedDateTime.now());
+            entity.setUpdatedAt(LocalDateTime.now());
             swapBlotterRepository.save(entity);
             swapBlotterCount++;
         }
@@ -92,7 +92,7 @@ public class ArchiveService {
         
         for (PartitionStateEntity entity : partitionStates) {
             entity.setArchiveFlag(true);
-            entity.setUpdatedAt(ZonedDateTime.now());
+            entity.setUpdatedAt(LocalDateTime.now());
             partitionStateRepository.save(entity);
             partitionStateCount++;
         }
@@ -105,7 +105,7 @@ public class ArchiveService {
         
         for (IdempotencyRecordEntity entity : idempotencyRecords) {
             entity.setArchiveFlag(true);
-            entity.setCompletedAt(ZonedDateTime.now());
+            entity.setCompletedAt(LocalDateTime.now());
             idempotencyRepository.save(entity);
             idempotencyCount++;
         }
@@ -126,7 +126,7 @@ public class ArchiveService {
     @Transactional
     public void archiveExpiredIdempotencyRecords() {
         log.info("Archiving expired idempotency records");
-        idempotencyRepository.archiveExpiredRecords(ZonedDateTime.now());
+        idempotencyRepository.archiveExpiredRecords(LocalDateTime.now());
     }
 
     @lombok.Data

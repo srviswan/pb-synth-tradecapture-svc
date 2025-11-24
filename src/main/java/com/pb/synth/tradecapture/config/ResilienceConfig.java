@@ -48,7 +48,6 @@ public class ResilienceConfig {
     public RetryConfig retryConfig() {
         return RetryConfig.custom()
             .maxAttempts(maxRetryAttempts)
-            .waitDuration(Duration.ofMillis(backoffDelay))
             .intervalFunction(IntervalFunction.ofExponentialBackoff(
                 Duration.ofMillis(backoffDelay), 2.0))
             .retryExceptions(Exception.class) // Retry on any exception

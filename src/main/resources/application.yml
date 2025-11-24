@@ -12,7 +12,6 @@ spring:
     password: ${DATABASE_PASSWORD:YourStrong@Passw0rd}
     driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
     hikari:
-      connection-init-sql: IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'tradecapture') CREATE DATABASE tradecapture;
       connection-timeout: 30000
   
   jpa:

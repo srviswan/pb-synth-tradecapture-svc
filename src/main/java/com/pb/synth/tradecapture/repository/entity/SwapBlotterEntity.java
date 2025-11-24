@@ -6,7 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.ZonedDateTime;
+import java.time.LocalDateTime;
 
 /**
  * JPA entity for SwapBlotter persistence.
@@ -43,21 +43,21 @@ public class SwapBlotterEntity {
     @Builder.Default
     private Boolean archiveFlag = false;
 
-    @Column(name = "created_at")
-    private ZonedDateTime createdAt;
+    @Column(name = "created_at", columnDefinition = "DATETIME2")
+    private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
-    private ZonedDateTime updatedAt;
+    @Column(name = "updated_at", columnDefinition = "DATETIME2")
+    private LocalDateTime updatedAt;
 
     @PrePersist
     protected void onCreate() {
-        createdAt = ZonedDateTime.now();
-        updatedAt = ZonedDateTime.now();
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = ZonedDateTime.now();
+        updatedAt = LocalDateTime.now();
     }
 }
 

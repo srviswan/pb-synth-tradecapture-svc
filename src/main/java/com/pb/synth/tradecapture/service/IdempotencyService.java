@@ -11,7 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.ZonedDateTime;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 /**
@@ -41,7 +41,7 @@ public class IdempotencyService {
             IdempotencyRecordEntity record = existing.get();
             
             // Check if expired
-            if (record.getExpiresAt().isBefore(ZonedDateTime.now())) {
+            if (record.getExpiresAt().isBefore(LocalDateTime.now())) {
                 log.debug("Idempotency record expired for key: {}", idempotencyKey);
                 return Optional.empty();
             }
@@ -75,8 +75,8 @@ public class IdempotencyService {
             .tradeId(request.getTradeId())
             .partitionKey(partitionKey)
             .status(IdempotencyStatus.PROCESSING)
-            .createdAt(ZonedDateTime.now())
-            .expiresAt(ZonedDateTime.now().plusHours(idempotencyWindowHours))
+            .createdAt(LocalDateTime.now())
+            .expiresAt(LocalDateTime.now().plusHours(idempotencyWindowHours))
             .build();
         
         return idempotencyRepository.save(record);
@@ -92,7 +92,7 @@ public class IdempotencyService {
             IdempotencyRecordEntity record = recordOpt.get();
             record.setStatus(IdempotencyStatus.COMPLETED);
             record.setSwapBlotterId(swapBlotterId);
-            record.setCompletedAt(ZonedDateTime.now());
+            record.setCompletedAt(LocalDateTime.now());
             idempotencyRepository.save(record);
         }
     }
@@ -106,7 +106,7 @@ public class IdempotencyService {
         if (recordOpt.isPresent()) {
             IdempotencyRecordEntity record = recordOpt.get();
             record.setStatus(IdempotencyStatus.FAILED);
-            record.setCompletedAt(ZonedDateTime.now());
+            record.setCompletedAt(LocalDateTime.now());
             idempotencyRepository.save(record);
         }
     }
@@ -116,7 +116,7 @@ public class IdempotencyService {
      */
     @Transactional
     public void archiveExpiredRecords() {
-        idempotencyRepository.archiveExpiredRecords(ZonedDateTime.now());
+        idempotencyRepository.archiveExpiredRecords(LocalDateTime.now());
         log.info("Archived expired idempotency records");
     }
 }

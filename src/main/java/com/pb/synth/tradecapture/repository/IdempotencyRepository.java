@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.ZonedDateTime;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 /**
@@ -33,7 +33,7 @@ public interface IdempotencyRepository extends JpaRepository<IdempotencyRecordEn
      */
     @Modifying
     @Query("UPDATE IdempotencyRecordEntity i SET i.archiveFlag = true, i.completedAt = :now WHERE i.expiresAt < :now AND i.archiveFlag = false")
-    void archiveExpiredRecords(@Param("now") ZonedDateTime now);
+    void archiveExpiredRecords(@Param("now") LocalDateTime now);
 
     /**
      * Find idempotency record by trade ID (non-archived only).

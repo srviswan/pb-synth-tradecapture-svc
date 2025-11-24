@@ -6,7 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.ZonedDateTime;
+import java.time.LocalDateTime;
 
 /**
  * JPA entity for idempotency record persistence.
@@ -47,18 +47,18 @@ public class IdempotencyRecordEntity {
     @Builder.Default
     private Boolean archiveFlag = false;
 
-    @Column(name = "created_at", nullable = false)
-    private ZonedDateTime createdAt;
+    @Column(name = "created_at", nullable = false, columnDefinition = "DATETIME2")
+    private LocalDateTime createdAt;
 
-    @Column(name = "completed_at")
-    private ZonedDateTime completedAt;
+    @Column(name = "completed_at", columnDefinition = "DATETIME2")
+    private LocalDateTime completedAt;
 
-    @Column(name = "expires_at", nullable = false)
-    private ZonedDateTime expiresAt;
+    @Column(name = "expires_at", nullable = false, columnDefinition = "DATETIME2")
+    private LocalDateTime expiresAt;
 
     @PrePersist
     protected void onCreate() {
-        createdAt = ZonedDateTime.now();
+        createdAt = LocalDateTime.now();
     }
 }
 

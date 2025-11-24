@@ -143,3 +143,6 @@ docker-compose.override.yml
 *.temp
 *.cache
 
+# Editor history files
+.history/
+
