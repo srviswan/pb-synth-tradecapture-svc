@@ -1,0 +1,19 @@
+version: '3.8'
+
+# Development docker-compose with hot reload support
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  trade-capture-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build
+    volumes:
+      - ./src:/app/src
+      - ./target:/app/target
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DEVTOOLS_RESTART_ENABLED=true
+    command: mvn spring-boot:run
+

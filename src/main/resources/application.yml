@@ -11,6 +11,9 @@ spring:
     username: ${DATABASE_USERNAME:sa}
     password: ${DATABASE_PASSWORD:YourStrong@Passw0rd}
     driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    hikari:
+      connection-init-sql: IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'tradecapture') CREATE DATABASE tradecapture;
+      connection-timeout: 30000
   
   jpa:
     hibernate:
@@ -20,6 +23,22 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.SQLServerDialect
         format_sql: true
+
+  # Flyway configuration
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+    validate-on-migrate: true
+    clean-disabled: true
+    schemas: dbo
+    sql-migration-prefix: V
+    sql-migration-separator: __
+    sql-migration-suffixes: .sql
+    baseline-description: Initial baseline
+    # Create database if it doesn't exist (connect to master first)
+    create-schemas: true
   
   # Redis configuration
   data:
@@ -103,6 +122,11 @@ messaging:
     topics:
       input: trade-capture-input
       output: trade-capture-blotter
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:pb-synth-tradecapture-svc}
+      auto-offset-reset: ${KAFKA_AUTO_OFFSET_RESET:earliest}
+      enable-auto-commit: ${KAFKA_ENABLE_AUTO_COMMIT:false}
+      max-poll-records: ${KAFKA_MAX_POLL_RECORDS:10}
   
   rabbitmq:
     enabled: ${RABBITMQ_ENABLED:false}

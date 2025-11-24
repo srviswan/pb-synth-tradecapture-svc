@@ -134,6 +134,9 @@ spring-boot-*.log
 
 # Docker
 .dockerignore
+docker-compose.override.yml
+.env
+.env.local
 
 # Temporary files
 *.tmp

@@ -37,6 +37,9 @@ public class WebhookSwapBlotterPublisher implements SwapBlotterPublisher {
         }
 
         for (String webhookUrl : webhookUrls) {
+            if (webhookUrl == null || webhookUrl.isEmpty()) {
+                continue;
+            }
             try {
                 String json = objectMapper.writeValueAsString(swapBlotter);
                 
