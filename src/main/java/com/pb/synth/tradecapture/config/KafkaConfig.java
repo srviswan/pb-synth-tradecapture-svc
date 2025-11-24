@@ -67,12 +67,9 @@ public class KafkaConfig {
         // Manual acknowledgment for better control
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         
-        // Error handling
-        factory.setCommonErrorHandler((exception, data) -> {
-            // Log error and handle appropriately
-            // In production, you might want to send to DLQ
-            System.err.println("Kafka listener error: " + exception.getMessage());
-        });
+        // Error handling - using DefaultErrorHandler
+        // In production, you might want to configure a custom error handler with DLQ
+        // factory.setCommonErrorHandler(new DefaultErrorHandler(...));
         
         return factory;
     }
