@@ -1,0 +1,33 @@
+spring:
+  profiles:
+    include: test
+
+# Testcontainers will provide MS SQL Server database and Redis
+# Services will use WireMock for HTTP services
+services:
+  security-master:
+    mock: true
+    url: http://localhost:${wiremock.port:8089}
+  
+  account:
+    mock: true
+    url: http://localhost:${wiremock.port:8089}
+  
+  rule-management:
+    mock: true
+    url: http://localhost:${wiremock.port:8089}
+  
+  approval-workflow:
+    mock: true
+    url: http://localhost:${wiremock.port:8089}
+
+# Testcontainers configuration
+testcontainers:
+  enabled: true
+  database:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    reuse: true
+  redis:
+    image: redis:7-alpine
+    reuse: true
+

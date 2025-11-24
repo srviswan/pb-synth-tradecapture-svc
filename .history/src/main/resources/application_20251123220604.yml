@@ -1,0 +1,136 @@
+spring:
+  application:
+    name: pb-synth-tradecapture-svc
+  
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  
+  # Database configuration
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/tradecapture}
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  
+  # Redis configuration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+# Server configuration
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+# Idempotency configuration
+idempotency:
+  enabled: true
+  window-hours: 24
+  cache-ttl-hours: 1
+  storage-type: redis+database
+  key-strategy: tradeId
+  allow-payload-differences: false
+  retry-on-failure: true
+
+# Service endpoints
+services:
+  security-master:
+    url: ${SECURITY_MASTER_SERVICE_URL:http://localhost:8081}
+    mock: ${SECURITY_MASTER_MOCK:false}
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+  
+  account:
+    url: ${ACCOUNT_SERVICE_URL:http://localhost:8082}
+    mock: ${ACCOUNT_SERVICE_MOCK:false}
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+  
+  rule-management:
+    url: ${RULE_MANAGEMENT_SERVICE_URL:http://localhost:8083}
+    mock: ${RULE_MANAGEMENT_MOCK:false}
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+  
+  approval-workflow:
+    url: ${APPROVAL_WORKFLOW_SERVICE_URL:http://localhost:8084}
+    mock: ${APPROVAL_WORKFLOW_MOCK:false}
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+
+# Messaging configuration
+messaging:
+  solace:
+    enabled: ${SOLACE_ENABLED:true}
+    host: ${SOLACE_HOST:localhost}
+    port: ${SOLACE_PORT:55555}
+    vpn: ${SOLACE_VPN:default}
+    username: ${SOLACE_USERNAME:default}
+    password: ${SOLACE_PASSWORD:default}
+    queues:
+      input: trade/capture/input
+      output: trade/capture/blotter
+      dlq: trade/capture/dlq
+  
+  kafka:
+    enabled: ${KAFKA_ENABLED:false}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    topics:
+      input: trade-capture-input
+      output: trade-capture-blotter
+  
+  rabbitmq:
+    enabled: ${RABBITMQ_ENABLED:false}
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    exchanges:
+      output: trade-capture-exchange
+
+# Publishing configuration
+publishing:
+  subscribers:
+    # Example subscriber configurations
+    # - name: downstream-service-1
+    #   type: queue
+    #   queue: trade/capture/blotter
+    #   enabled: true
+    # - name: downstream-service-2
+    #   type: webhook
+    #   url: http://localhost:8085/webhook
+    #   enabled: true
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.pb.synth.tradecapture: DEBUG
+    org.springframework: WARN
+    org.hibernate: WARN
+

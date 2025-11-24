@@ -1,0 +1,255 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PB Synthetic Trade Capture Rules Configuration Schema",
+  "description": "Schema for defining Economic, Non-Economic, and Workflow rules for the pb-synth-tradecapture-svc (PB Synthetic Trade Capture Service)",
+  "type": "object",
+  "required": ["version", "rules"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Schema version",
+      "example": "1.0.0"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Metadata about the rules configuration",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the rules configuration"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the rules configuration"
+        },
+        "lastUpdated": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        },
+        "author": {
+          "type": "string",
+          "description": "Author of the configuration"
+        }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "description": "Container for all rule types",
+      "required": ["economic", "nonEconomic", "workflow"],
+      "properties": {
+        "economic": {
+          "type": "array",
+          "description": "Economic rules - determine payout schedules, day counts, resetting behaviors",
+          "items": {
+            "$ref": "#/definitions/EconomicRule"
+          }
+        },
+        "nonEconomic": {
+          "type": "array",
+          "description": "Non-economic rules - legal entities, documentation clauses, regulatory flags",
+          "items": {
+            "$ref": "#/definitions/NonEconomicRule"
+          }
+        },
+        "workflow": {
+          "type": "array",
+          "description": "Workflow rules - determine if trade is manual vs automated, approval requirements",
+          "items": {
+            "$ref": "#/definitions/WorkflowRule"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Rule": {
+      "type": "object",
+      "required": ["id", "name", "priority", "enabled", "criteria", "actions"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique rule identifier",
+          "example": "ECONOMIC_RULE_001"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable rule name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Rule description"
+        },
+        "priority": {
+          "type": "integer",
+          "description": "Rule priority (lower number = higher priority)",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the rule is enabled"
+        },
+        "criteria": {
+          "type": "array",
+          "description": "List of criteria that must all be met for the rule to apply",
+          "items": {
+            "$ref": "#/definitions/Criterion"
+          }
+        },
+        "actions": {
+          "type": "array",
+          "description": "Actions to execute when criteria are met",
+          "items": {
+            "$ref": "#/definitions/Action"
+          }
+        }
+      }
+    },
+    "EconomicRule": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Rule"
+        },
+        {
+          "type": "object",
+          "description": "Economic rule specific properties",
+          "properties": {
+            "ruleType": {
+              "type": "string",
+              "enum": ["ECONOMIC"],
+              "description": "Rule type identifier"
+            },
+            "target": {
+              "type": "string",
+              "enum": ["ECONOMIC_TERMS", "PERFORMANCE_PAYOUT", "INTEREST_PAYOUT", "PAYOUT_SCHEDULE", "DAY_COUNT", "RESET_BEHAVIOR"],
+              "description": "What part of the economic terms this rule affects"
+            }
+          }
+        }
+      ]
+    },
+    "NonEconomicRule": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Rule"
+        },
+        {
+          "type": "object",
+          "description": "Non-economic rule specific properties",
+          "properties": {
+            "ruleType": {
+              "type": "string",
+              "enum": ["NON_ECONOMIC"],
+              "description": "Rule type identifier"
+            },
+            "target": {
+              "type": "string",
+              "enum": ["LEGAL_ENTITY", "DOCUMENTATION", "REGULATORY_FLAG", "COUNTERPARTY", "ACCOUNT"],
+              "description": "What part of the contract this rule affects"
+            }
+          }
+        }
+      ]
+    },
+    "WorkflowRule": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Rule"
+        },
+        {
+          "type": "object",
+          "description": "Workflow rule specific properties",
+          "properties": {
+            "ruleType": {
+              "type": "string",
+              "enum": ["WORKFLOW"],
+              "description": "Rule type identifier"
+            },
+            "target": {
+              "type": "string",
+              "enum": ["WORKFLOW_STATUS", "APPROVAL_REQUIRED", "ROUTING"],
+              "description": "What workflow aspect this rule affects"
+            }
+          }
+        }
+      ]
+    },
+    "Criterion": {
+      "type": "object",
+      "required": ["field", "operator", "value"],
+      "description": "A single criterion to evaluate",
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "Field path to evaluate (e.g., 'account.type', 'trade.amount', 'security.assetClass')",
+          "examples": [
+            "account.type",
+            "account.riskRating",
+            "book.status",
+            "security.assetClass",
+            "security.isin",
+            "trade.amount",
+            "trade.source",
+            "counterparty.riskRating",
+            "counterparty.creditLimit",
+            "tradeLots[0].priceQuantity[0].quantity.value"
+          ]
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["EQUALS", "NOT_EQUALS", "GREATER_THAN", "GREATER_THAN_OR_EQUAL", "LESS_THAN", "LESS_THAN_OR_EQUAL", "IN", "NOT_IN", "CONTAINS", "NOT_CONTAINS", "REGEX", "EXISTS", "NOT_EXISTS"],
+          "description": "Comparison operator"
+        },
+        "value": {
+          "description": "Value to compare against (type depends on field and operator)",
+          "oneOf": [
+            {"type": "string"},
+            {"type": "number"},
+            {"type": "boolean"},
+            {"type": "array"},
+            {"type": "null"}
+          ]
+        },
+        "logicalOperator": {
+          "type": "string",
+          "enum": ["AND", "OR"],
+          "description": "Logical operator to combine with next criterion (default: AND)",
+          "default": "AND"
+        }
+      }
+    },
+    "Action": {
+      "type": "object",
+      "required": ["type"],
+      "description": "Action to execute when rule criteria are met",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["SET_FIELD", "ADD_PAYOUT", "SET_DAY_COUNT", "SET_RESET_BEHAVIOR", "SET_WORKFLOW_STATUS", "SET_APPROVAL_REQUIRED", "SET_REGULATORY_FLAG", "ENRICH_FIELD", "VALIDATE"],
+          "description": "Type of action to execute"
+        },
+        "target": {
+          "type": "string",
+          "description": "Target field or object to modify (e.g., 'economicTerms.payout[0].performancePayout', 'workflowStatus')"
+        },
+        "value": {
+          "description": "Value to set (type depends on action type)",
+          "oneOf": [
+            {"type": "string"},
+            {"type": "number"},
+            {"type": "boolean"},
+            {"type": "object"},
+            {"type": "array"}
+          ]
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Additional parameters for the action",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}
+

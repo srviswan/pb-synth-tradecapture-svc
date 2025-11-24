@@ -1,0 +1,83 @@
+spring:
+  application:
+    name: pb-synth-tradecapture-svc-test
+  profiles:
+    active: test
+  
+  # Database configuration for tests
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+  
+  # Redis configuration for tests
+  data:
+    redis:
+      host: localhost
+      port: 6370
+      timeout: 2000ms
+
+# Service endpoints (mocked)
+services:
+  security-master:
+    url: http://localhost:${wiremock.port:8089}
+    mock: true
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+  
+  account:
+    url: http://localhost:${wiremock.port:8089}
+    mock: true
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+  
+  rule-management:
+    url: http://localhost:${wiremock.port:8089}
+    mock: true
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+  
+  approval-workflow:
+    url: http://localhost:${wiremock.port:8089}
+    mock: true
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+
+# Solace configuration (mocked/embedded)
+solace:
+  host: localhost
+  port: 55555
+  vpn: default
+  username: default
+  password: default
+  queues:
+    input: trade/capture/input
+    output: trade/capture/blotter
+    dlq: trade/capture/dlq
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.pb.synth.tradecapture: DEBUG
+    org.springframework: WARN
+    org.hibernate: WARN
+

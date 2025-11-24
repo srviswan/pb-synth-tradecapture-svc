@@ -1,0 +1,263 @@
+# NOTE: This is an example file showing the structure of rules.
+# Economic and Non-Economic rules are received via API integration from external rule management service.
+# Workflow rules can be either API-based or configuration-based.
+# This file serves as a reference for understanding the rule structure and format.
+
+version: "1.0.0"
+
+metadata:
+  name: "Equity Swap Trade Capture Rules"
+  description: "Rules for capturing and enriching equity swap trades"
+  lastUpdated: "2024-01-31T10:00:00Z"
+  author: "PB Synthetic Trade Capture Service Team"
+
+rules:
+  economic:
+    # Economic Rule 1: Set day count fraction based on currency
+    - id: "ECONOMIC_RULE_001"
+      name: "Set Day Count Fraction by Currency"
+      description: "Sets day count fraction based on trade currency"
+      ruleType: "ECONOMIC"
+      target: "DAY_COUNT"
+      priority: 100
+      enabled: true
+      criteria:
+        - field: "trade.currency"
+          operator: "EQUALS"
+          value: "USD"
+          logicalOperator: "AND"
+        - field: "security.assetClass"
+          operator: "EQUALS"
+          value: "Equity"
+      actions:
+        - type: "SET_DAY_COUNT"
+          target: "economicTerms.interestRatePayout.dayCountFraction"
+          value: "ACT/360"
+    
+    # Economic Rule 2: Set day count fraction for EUR trades
+    - id: "ECONOMIC_RULE_002"
+      name: "Set Day Count Fraction for EUR"
+      description: "Sets day count fraction to ACT/365 for EUR trades"
+      ruleType: "ECONOMIC"
+      target: "DAY_COUNT"
+      priority: 100
+      enabled: true
+      criteria:
+        - field: "trade.currency"
+          operator: "EQUALS"
+          value: "EUR"
+      actions:
+        - type: "SET_DAY_COUNT"
+          target: "economicTerms.interestRatePayout.dayCountFraction"
+          value: "ACT/365"
+    
+    # Economic Rule 3: Set fixed rate for retail accounts
+    - id: "ECONOMIC_RULE_003"
+      name: "Set Fixed Rate for Retail Accounts"
+      description: "Sets fixed interest rate for retail account trades"
+      ruleType: "ECONOMIC"
+      target: "INTEREST_PAYOUT"
+      priority: 200
+      enabled: true
+      criteria:
+        - field: "account.type"
+          operator: "EQUALS"
+          value: "RETAIL"
+      actions:
+        - type: "SET_FIELD"
+          target: "economicTerms.payout[?(@.interestRatePayout)].interestRatePayout.fixedRate"
+          value: 0.025
+          parameters:
+            defaultRate: 0.025
+    
+    # Economic Rule 4: Set performance payout return type
+    - id: "ECONOMIC_RULE_004"
+      name: "Set Total Return for Equity Swaps"
+      description: "Sets return type to Total (price + dividends) for equity swaps"
+      ruleType: "ECONOMIC"
+      target: "PERFORMANCE_PAYOUT"
+      priority: 150
+      enabled: true
+      criteria:
+        - field: "security.assetClass"
+          operator: "EQUALS"
+          value: "Equity"
+      actions:
+        - type: "SET_FIELD"
+          target: "economicTerms.payout[?(@.performancePayout)].performancePayout.returnTerms.priceReturnTerms.returnType"
+          value: "Total"
+        - type: "SET_FIELD"
+          target: "economicTerms.payout[?(@.performancePayout)].performancePayout.returnTerms.dividendReturnTerms.dividendPayoutRatio"
+          value: [1.0]
+
+  nonEconomic:
+    # Non-Economic Rule 1: Set legal entity based on account
+    - id: "NON_ECONOMIC_RULE_001"
+      name: "Set Legal Entity from Account"
+      description: "Sets legal entity based on account information"
+      ruleType: "NON_ECONOMIC"
+      target: "LEGAL_ENTITY"
+      priority: 100
+      enabled: true
+      criteria:
+        - field: "account.legalEntity"
+          operator: "EXISTS"
+      actions:
+        - type: "SET_FIELD"
+          target: "contract.legalEntity"
+          value: "${account.legalEntity}"
+    
+    # Non-Economic Rule 2: Set regulatory flag for high-risk securities
+    - id: "NON_ECONOMIC_RULE_002"
+      name: "Set Regulatory Flag for High Risk"
+      description: "Sets regulatory flag for high-risk securities"
+      ruleType: "NON_ECONOMIC"
+      target: "REGULATORY_FLAG"
+      priority: 150
+      enabled: true
+      criteria:
+        - field: "security.riskRating"
+          operator: "EQUALS"
+          value: "HIGH"
+      actions:
+        - type: "SET_REGULATORY_FLAG"
+          target: "contract.regulatoryFlags"
+          value: "HIGH_RISK_SECURITY"
+          parameters:
+            flagType: "RISK_WARNING"
+    
+    # Non-Economic Rule 3: Set documentation requirements
+    - id: "NON_ECONOMIC_RULE_003"
+      name: "Set Documentation Requirements"
+      description: "Sets documentation requirements based on trade amount"
+      ruleType: "NON_ECONOMIC"
+      target: "DOCUMENTATION"
+      priority: 200
+      enabled: true
+      criteria:
+        - field: "trade.amount"
+          operator: "GREATER_THAN"
+          value: 10000000
+      actions:
+        - type: "SET_FIELD"
+          target: "contract.documentationRequirements"
+          value: ["ISDA_MASTER", "CREDIT_SUPPORT_ANNEX"]
+
+  workflow:
+    # Workflow Rule 1: Require approval for manual trades
+    - id: "WORKFLOW_RULE_001"
+      name: "Require Approval for Manual Trades"
+      description: "Sets workflow status to PENDING_APPROVAL for manually entered trades"
+      ruleType: "WORKFLOW"
+      target: "WORKFLOW_STATUS"
+      priority: 100
+      enabled: true
+      criteria:
+        - field: "trade.source"
+          operator: "EQUALS"
+          value: "MANUAL"
+      actions:
+        - type: "SET_WORKFLOW_STATUS"
+          target: "workflowStatus"
+          value: "PENDING_APPROVAL"
+          parameters:
+            notificationRequired: true
+            approvalWorkflow: "MANUAL_TRADE_APPROVAL"
+    
+    # Workflow Rule 2: Require approval for retail accounts with high amounts
+    - id: "WORKFLOW_RULE_002"
+      name: "Require Approval for Retail High Amount"
+      description: "Requires approval for retail accounts with trade amounts exceeding threshold"
+      ruleType: "WORKFLOW"
+      target: "APPROVAL_REQUIRED"
+      priority: 150
+      enabled: true
+      criteria:
+        - field: "account.type"
+          operator: "EQUALS"
+          value: "RETAIL"
+          logicalOperator: "AND"
+        - field: "trade.amount"
+          operator: "GREATER_THAN"
+          value: 1000000
+      actions:
+        - type: "SET_WORKFLOW_STATUS"
+          target: "workflowStatus"
+          value: "PENDING_APPROVAL"
+          parameters:
+            notificationRequired: true
+            approvalWorkflow: "RETAIL_HIGH_AMOUNT_APPROVAL"
+            threshold: 1000000
+    
+    # Workflow Rule 3: Require approval for high-risk counterparties
+    - id: "WORKFLOW_RULE_003"
+      name: "Require Approval for High Risk Counterparty"
+      description: "Requires approval for trades with high-risk counterparties"
+      ruleType: "WORKFLOW"
+      target: "APPROVAL_REQUIRED"
+      priority: 200
+      enabled: true
+      criteria:
+        - field: "counterparty.riskRating"
+          operator: "EQUALS"
+          value: "HIGH"
+      actions:
+        - type: "SET_WORKFLOW_STATUS"
+          target: "workflowStatus"
+          value: "PENDING_APPROVAL"
+          parameters:
+            notificationRequired: true
+            approvalWorkflow: "HIGH_RISK_COUNTERPARTY_APPROVAL"
+    
+    # Workflow Rule 4: Require approval if trade amount exceeds credit limit
+    - id: "WORKFLOW_RULE_004"
+      name: "Require Approval for Credit Limit Exceeded"
+      description: "Requires approval if trade amount exceeds counterparty credit limit"
+      ruleType: "WORKFLOW"
+      target: "APPROVAL_REQUIRED"
+      priority: 250
+      enabled: true
+      criteria:
+        - field: "trade.amount"
+          operator: "GREATER_THAN"
+          value: "${counterparty.creditLimit}"
+      actions:
+        - type: "SET_WORKFLOW_STATUS"
+          target: "workflowStatus"
+          value: "PENDING_APPROVAL"
+          parameters:
+            notificationRequired: true
+            approvalWorkflow: "CREDIT_LIMIT_EXCEEDED_APPROVAL"
+            rejectionReason: "Trade amount exceeds credit limit"
+    
+    # Workflow Rule 5: Auto-approve for automated trades with low risk
+    - id: "WORKFLOW_RULE_005"
+      name: "Auto-Approve Low Risk Automated Trades"
+      description: "Auto-approves automated trades with low risk"
+      ruleType: "WORKFLOW"
+      target: "WORKFLOW_STATUS"
+      priority: 300
+      enabled: true
+      criteria:
+        - field: "trade.source"
+          operator: "EQUALS"
+          value: "AUTOMATED"
+          logicalOperator: "AND"
+        - field: "account.type"
+          operator: "NOT_EQUALS"
+          value: "RETAIL"
+          logicalOperator: "AND"
+        - field: "counterparty.riskRating"
+          operator: "NOT_EQUALS"
+          value: "HIGH"
+          logicalOperator: "AND"
+        - field: "trade.amount"
+          operator: "LESS_THAN_OR_EQUAL"
+          value: "${counterparty.creditLimit}"
+      actions:
+        - type: "SET_WORKFLOW_STATUS"
+          target: "workflowStatus"
+          value: "APPROVED"
+          parameters:
+            stpProcessing: true
+

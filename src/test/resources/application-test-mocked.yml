@@ -1,0 +1,36 @@
+spring:
+  profiles:
+    include: test
+
+# All external services mocked
+services:
+  security-master:
+    mock: true
+    url: http://localhost:${wiremock.port:8089}
+  
+  account:
+    mock: true
+    url: http://localhost:${wiremock.port:8089}
+  
+  rule-management:
+    mock: true
+    url: http://localhost:${wiremock.port:8089}
+  
+  approval-workflow:
+    mock: true
+    url: http://localhost:${wiremock.port:8089}
+
+# Use embedded Redis
+redis:
+  embedded: true
+  port: 6370
+
+# Use embedded database
+database:
+  embedded: true
+
+# Use embedded/mocked Solace
+solace:
+  embedded: true
+  mock: true
+

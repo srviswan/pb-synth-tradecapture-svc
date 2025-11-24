@@ -1,0 +1,356 @@
+syntax = "proto3";
+
+package pb.synth.tradecapture;
+
+option java_package = "com.pb.synth.tradecapture.proto";
+option java_outer_classname = "TradeCaptureProto";
+
+// TradeCaptureMessage represents a trade lot message for processing
+// Messages are serialized in protobuf format and published to messaging queues
+// Idempotency: trade_id must be unique; duplicate trade_id within idempotency window returns cached result
+message TradeCaptureMessage {
+  // Unique trade identifier (required for idempotency)
+  string trade_id = 1;
+  
+  // Optional idempotency key (if not provided, trade_id is used)
+  string idempotency_key = 14;
+  
+  // Account identifier (part of partition key)
+  string account_id = 2;
+  
+  // Book identifier (part of partition key)
+  string book_id = 3;
+  
+  // Security identifier (part of partition key) - ISIN, CUSIP, etc.
+  string security_id = 4;
+  
+  // Partition key: {accountId}_{bookId}_{securityId}
+  // Used for maintaining sequence per Account/Book + Security
+  string partition_key = 5;
+  
+  // Sequence number for detecting out-of-order processing
+  int64 sequence_number = 6;
+  
+  // Source of the trade (AUTOMATED or MANUAL)
+  TradeSource source = 7;
+  
+  // Trade date (ISO 8601 format: YYYY-MM-DD)
+  string trade_date = 8;
+  
+  // Timestamp when message was created (ISO 8601 format)
+  string timestamp = 9;
+  
+  // List of trade lots
+  repeated TradeLot trade_lots = 10;
+  
+  // Counterparty identifiers (typically 2 parties)
+  repeated string counterparty_ids = 11;
+  
+  // Additional metadata (key-value pairs)
+  map<string, string> metadata = 12;
+  
+  // Manual entry specific fields (only populated if source = MANUAL)
+  ManualEntryInfo manual_entry_info = 13;
+}
+
+// TradeLot represents a single trade lot with price and quantity
+message TradeLot {
+  // Lot identifiers
+  repeated Identifier lot_identifier = 1;
+  
+  // Price and quantity information
+  repeated PriceQuantity price_quantity = 2;
+}
+
+// Identifier for lot, trade, or security
+message Identifier {
+  // Identifier value
+  string identifier = 1;
+  
+  // Identifier type (INTERNAL, EXTERNAL, ISIN, CUSIP, SEDOL, TICKER)
+  string identifier_type = 2;
+}
+
+// PriceQuantity represents price and quantity for a trade lot
+message PriceQuantity {
+  // Quantity information
+  repeated Quantity quantity = 1;
+  
+  // Price information
+  repeated Price price = 2;
+}
+
+// Quantity with value and unit
+message Quantity {
+  // Quantity value
+  double value = 1;
+  
+  // Unit information
+  Unit unit = 2;
+}
+
+// Price with value and unit
+message Price {
+  // Price value
+  double value = 1;
+  
+  // Unit information (currency)
+  Unit unit = 2;
+}
+
+// Unit can be currency or financial unit (shares, contracts, etc.)
+message Unit {
+  // Currency code (ISO 4217, e.g., "USD")
+  string currency = 1;
+  
+  // Financial unit (Shares, Contracts, Units)
+  string financial_unit = 2;
+}
+
+// Manual entry information (only for manually entered trades)
+message ManualEntryInfo {
+  // User ID who entered the trade
+  string entered_by = 1;
+  
+  // Timestamp when trade was entered (ISO 8601 format)
+  string entry_timestamp = 2;
+}
+
+// Trade source enumeration
+enum TradeSource {
+  // Trade from automated system (STP)
+  AUTOMATED = 0;
+  
+  // Trade manually entered via manual entry screen
+  MANUAL = 1;
+}
+
+// SwapBlotterMessage represents the output after trade capture and enrichment
+// Published to output topic (e.g., trade/capture/blotter)
+message SwapBlotterMessage {
+  // Unique trade identifier
+  string trade_id = 1;
+  
+  // Partition key (Account/Book + Security)
+  string partition_key = 2;
+  
+  // Trade lots (CDM TradeLot)
+  repeated TradeLot trade_lots = 3;
+  
+  // Contract (NonTransferableProduct wrapper)
+  Contract contract = 4;
+  
+  // State (CDM State with PositionStatusEnum)
+  State state = 5;
+  
+  // Enrichment status
+  EnrichmentStatus enrichment_status = 6;
+  
+  // Workflow status (determined by workflow rules)
+  WorkflowStatus workflow_status = 7;
+  
+  // Processing metadata
+  ProcessingMetadata processing_metadata = 8;
+  
+  // Processing status
+  ProcessingStatus status = 9;
+  
+  // Optional error information
+  ProcessingError error = 10;
+}
+
+// Contract represents NonTransferableProduct with EconomicTerms
+message Contract {
+  // Product identifiers
+  repeated Identifier identifier = 1;
+  
+  // Product taxonomy
+  repeated ProductTaxonomy taxonomy = 2;
+  
+  // Economic terms (including payouts)
+  EconomicTerms economic_terms = 3;
+}
+
+// ProductTaxonomy
+message ProductTaxonomy {
+  // Primary asset class
+  string primary_asset_class = 1;
+}
+
+// EconomicTerms with payouts
+message EconomicTerms {
+  // Effective date (ISO 8601 format: YYYY-MM-DD)
+  string effective_date = 1;
+  
+  // Termination date (ISO 8601 format: YYYY-MM-DD)
+  string termination_date = 2;
+  
+  // Payouts (PerformancePayout, InterestPayout, etc.)
+  repeated Payout payouts = 3;
+}
+
+// Payout union type (can be PerformancePayout, InterestPayout, etc.)
+message Payout {
+  // Performance payout (equity leg)
+  PerformancePayout performance_payout = 1;
+  
+  // Interest rate payout (interest leg)
+  InterestRatePayout interest_rate_payout = 2;
+}
+
+// PerformancePayout (equity leg)
+message PerformancePayout {
+  // Payer and receiver
+  PayerReceiver payer_receiver = 1;
+  
+  // Price and quantity
+  PriceQuantity price_quantity = 2;
+  
+  // Underlier information
+  Underlier underlier = 3;
+}
+
+// InterestRatePayout (interest leg)
+message InterestRatePayout {
+  // Payer and receiver
+  PayerReceiver payer_receiver = 1;
+  
+  // Price and quantity
+  PriceQuantity price_quantity = 2;
+  
+  // Fixed rate (if applicable)
+  double fixed_rate = 3;
+  
+  // Floating rate specification (if applicable)
+  FloatingRateSpec floating_rate = 4;
+}
+
+// PayerReceiver
+message PayerReceiver {
+  // Payer party identifier
+  string payer = 1;
+  
+  // Receiver party identifier
+  string receiver = 2;
+}
+
+// Underlier information
+message Underlier {
+  // Observable asset
+  Observable observable = 1;
+}
+
+// Observable asset
+message Observable {
+  // Asset information
+  Asset asset = 1;
+}
+
+// Asset
+message Asset {
+  // Security information
+  Security security = 1;
+}
+
+// Security
+message Security {
+  // Security identifiers
+  repeated Identifier identifier = 1;
+}
+
+// FloatingRateSpec (simplified for protobuf)
+message FloatingRateSpec {
+  // Floating rate index
+  string index = 1;
+  
+  // Spread
+  double spread = 2;
+}
+
+// State (CDM State)
+message State {
+  // Position state (CDM PositionStatusEnum)
+  PositionStatusEnum position_state = 1;
+  
+  // Closed state information (if applicable)
+  ClosedState closed_state = 2;
+}
+
+// PositionStatusEnum (CDM values)
+enum PositionStatusEnum {
+  EXECUTED = 0;
+  FORMED = 1;
+  SETTLED = 2;
+  CANCELLED = 3;
+  CLOSED = 4;
+}
+
+// ClosedState
+message ClosedState {
+  // Reason for closure
+  string reason = 1;
+  
+  // Closure date (ISO 8601 format: YYYY-MM-DD)
+  string closure_date = 2;
+}
+
+// EnrichmentStatus
+enum EnrichmentStatus {
+  ENRICHMENT_COMPLETE = 0;
+  ENRICHMENT_PARTIAL = 1;
+  ENRICHMENT_FAILED = 2;
+  ENRICHMENT_PENDING = 3;
+}
+
+// WorkflowStatus (determined by workflow rules)
+enum WorkflowStatus {
+  WORKFLOW_APPROVED = 0;
+  WORKFLOW_PENDING_APPROVAL = 1;
+  WORKFLOW_REJECTED = 2;
+}
+
+// ProcessingStatus
+enum ProcessingStatus {
+  PROCESSING_SUCCESS = 0;
+  PROCESSING_FAILED = 1;
+  PROCESSING_PARTIAL = 2;
+  PROCESSING_PENDING = 3;
+}
+
+// ProcessingMetadata
+message ProcessingMetadata {
+  // Timestamp when processed (ISO 8601 format)
+  string processed_at = 1;
+  
+  // Processing time in milliseconds
+  int64 processing_time_ms = 2;
+  
+  // List of rule IDs that were applied
+  repeated string rules_applied = 3;
+  
+  // Sources used for enrichment
+  repeated string enrichment_sources = 4;
+}
+
+// ProcessingError
+message ProcessingError {
+  // Error code
+  string code = 1;
+  
+  // Error message
+  string message = 2;
+  
+  // Error severity
+  ErrorSeverity severity = 3;
+  
+  // Additional error details (key-value pairs)
+  map<string, string> details = 4;
+}
+
+// ErrorSeverity
+enum ErrorSeverity {
+  ERROR = 0;
+  WARNING = 1;
+  INFO = 2;
+}
+

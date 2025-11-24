@@ -1,0 +1,66 @@
+spring:
+  profiles:
+    include: test
+
+# Real services configuration for E2E testing
+# These should point to test environment services
+services:
+  security-master:
+    mock: false
+    url: ${SECURITY_MASTER_SERVICE_URL:http://localhost:8081}
+    timeout: 10000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+  
+  account:
+    mock: false
+    url: ${ACCOUNT_SERVICE_URL:http://localhost:8082}
+    timeout: 10000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+  
+  rule-management:
+    mock: false
+    url: ${RULE_MANAGEMENT_SERVICE_URL:http://localhost:8083}
+    timeout: 10000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+  
+  approval-workflow:
+    mock: false
+    url: ${APPROVAL_WORKFLOW_SERVICE_URL:http://localhost:8084}
+    timeout: 10000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+
+# Real Redis (test environment)
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+# Real Database (test environment) - MS SQL Server
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:sqlserver://localhost:1433;databaseName=tradecapture_test;encrypt=true;trustServerCertificate=true}
+    username: ${DATABASE_USERNAME:sa}
+    password: ${DATABASE_PASSWORD:YourStrong@Passw0rd}
+
+# Real Solace (test environment)
+solace:
+  host: ${SOLACE_HOST:localhost}
+  port: ${SOLACE_PORT:55555}
+  vpn: ${SOLACE_VPN:default}
+  username: ${SOLACE_USERNAME:default}
+  password: ${SOLACE_PASSWORD:default}
+  queues:
+    input: trade/capture/input
+    output: trade/capture/blotter
+    dlq: trade/capture/dlq
+

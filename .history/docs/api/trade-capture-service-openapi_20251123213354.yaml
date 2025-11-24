@@ -1,0 +1,1696 @@
+openapi: 3.0.3
+info:
+  title: PB Synthetic Trade Capture Service API
+  description: |
+    API for capturing and enriching trade lots from upstream systems, applying economic and non-economic rules,
+    performing validations and enrichments, and producing SwapBlotter output with fully enriched contracts.
+    
+    The pb-synth-tradecapture-svc processes incoming trade lots and:
+    - Applies economic rules to create contracts with EconomicTerms, PerformancePayout, and InterestPayout
+    - Applies non-economic rules for legal entities, documentation, and regulatory flags
+    - Performs validations and enrichments by looking up products/securities and books/accounts
+    - Manages workflow (manual approval for manually booked trades)
+    - Maintains state consistency per Account/Book + Security partition
+    - Supports CDM-compliant state transitions
+    
+    **Key Features:**
+    - Synchronous and asynchronous trade capture
+    - Batch processing for multiple trades
+    - Manual trade entry screen integration
+    - Partition-aware processing for sequencing (Account/Book + Security)
+    - Rule-based workflow determination
+    - State management following CDM PositionStatusEnum
+    
+    **Processing Modes:**
+    - Real-time streaming via Solace PubSub+ queues (protobuf messages)
+    - REST API for synchronous and asynchronous processing
+    - Manual trade entry screen that publishes to Solace queue
+    
+    **Scalability:**
+    - Designed for 2M trades/day with burst capacity during market hours (3-6 PM AMER/APAC/EMEA)
+    - Peak capacity: ~186 trades/sec (all regions) or ~62 trades/sec per region
+    - Horizontal scaling with partition affinity
+  version: 1.0.0
+  contact:
+    name: PB Synthetic Trade Capture Service Team
+    email: pb-synth-tradecapture-svc@example.com
+  license:
+    name: Community Specification License 1.0
+    url: https://github.com/finos/common-domain-model/blob/master/LICENSE.md
+
+servers:
+  - url: https://api.example.com/api/v1
+    description: Production server
+  - url: https://api-staging.example.com/api/v1
+    description: Staging server
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+
+tags:
+  - name: Trade Capture
+    description: Trade capture and enrichment operations
+  - name: Manual Entry
+    description: Manual trade entry operations
+  - name: Rules
+    description: Rule management operations (Economic, Non-Economic, Workflow rules)
+  - name: Health
+    description: Service health and status checks
+
+paths:
+  /trades/capture:
+    post:
+      tags:
+        - Trade Capture
+      summary: Capture and enrich a single trade (synchronous)
+      description: |
+        Synchronously captures and enriches a single trade. The service:
+        1. Extracts partition key (Account/Book + Security)
+        2. Enriches trade data (product/security lookup, account/book lookup)
+        3. Applies economic rules (creates EconomicTerms, PerformancePayout, InterestPayout)
+        4. Applies non-economic rules (legal entities, documentation, regulatory flags)
+        5. Validates the trade
+        6. Applies workflow rules to determine approval status
+        7. Updates state (CDM-compliant)
+        8. Returns SwapBlotter with enriched contract
+        
+        Processing is partition-aware to maintain sequence per Account/Book + Security.
+      operationId: captureTrade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradeCaptureRequest'
+            examples:
+              equitySwapExample:
+                summary: Equity Swap Trade Capture
+                value:
+                  tradeId: "TRADE-2024-001"
+                  accountId: "ACC-001"
+                  bookId: "BOOK-001"
+                  securityId: "US0378331005"
+                  source: "AUTOMATED"
+                  tradeLots:
+                    - lotIdentifier:
+                        - identifier: "LOT-001"
+                          identifierType: "INTERNAL"
+                      priceQuantity:
+                        - quantity:
+                            value: 10000
+                            unit:
+                              financialUnit: "Shares"
+                          price:
+                            value: 150.25
+                            unit:
+                              currency: "USD"
+                  tradeDate: "2024-01-31"
+                  counterpartyIds:
+                    - "PARTY-A"
+                    - "PARTY-B"
+      responses:
+        '200':
+          description: Trade captured and enriched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradeCaptureResponse'
+              examples:
+                successResponse:
+                  summary: Successful Trade Capture
+                  value:
+                    swapBlotter:
+                      tradeId: "TRADE-2024-001"
+                      partitionKey: "ACC-001_BOOK-001_US0378331005"
+                      tradeLots:
+                        - lotIdentifier:
+                            - identifier: "LOT-001"
+                              identifierType: "INTERNAL"
+                          priceQuantity:
+                            - quantity:
+                                value: 10000
+                                unit:
+                                  financialUnit: "Shares"
+                            price:
+                              value: 150.25
+                              unit:
+                                currency: "USD"
+                      contract:
+                        identifier:
+                          - identifier: "CONTRACT-2024-001"
+                            identifierType: "INTERNAL"
+                        taxonomy:
+                          - primaryAssetClass: "Equity"
+                        economicTerms:
+                          effectiveDate: "2024-01-31"
+                          terminationDate: "2025-01-31"
+                          payout:
+                            - performancePayout:
+                                payerReceiver:
+                                  payer: "PARTY-A"
+                                  receiver: "PARTY-B"
+                                priceQuantity:
+                                  priceQuantity:
+                                    quantity:
+                                      - value: 10000
+                                        unit:
+                                          financialUnit: "Shares"
+                                    price:
+                                      - value: 150.25
+                                        unit:
+                                          currency: "USD"
+                                underlier:
+                                  observable:
+                                    asset:
+                                      security:
+                                        identifier:
+                                          - identifier: "US0378331005"
+                                            identifierType: "ISIN"
+                            - interestRatePayout:
+                                payerReceiver:
+                                  payer: "PARTY-B"
+                                  receiver: "PARTY-A"
+                                priceQuantity:
+                                  priceQuantity:
+                                    quantity:
+                                      - value: 1502500
+                                        unit:
+                                          currency: "USD"
+                                fixedRate: 0.025
+                      state:
+                        positionState: "Executed"
+                      enrichmentStatus: "COMPLETE"
+                      workflowStatus: "APPROVED"
+                      processingMetadata:
+                        processedAt: "2024-01-31T10:30:00Z"
+                        processingTimeMs: 150
+                        rulesApplied:
+                          - "ECONOMIC_RULE_001"
+                          - "NON_ECONOMIC_RULE_002"
+                          - "WORKFLOW_RULE_003"
+                    status: "SUCCESS"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /trades/capture/async:
+    post:
+      tags:
+        - Trade Capture
+      summary: Capture and enrich a single trade (asynchronous)
+      description: |
+        Asynchronously captures and enriches a single trade. Returns a job ID that can be used to
+        check the status of the processing. The trade is queued for processing and handled by
+        the partition-aware processor.
+      operationId: captureTradeAsync
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradeCaptureRequest'
+      responses:
+        '202':
+          description: Trade capture job accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncJobResponse'
+              examples:
+                asyncJobExample:
+                  summary: Async Job Response
+                  value:
+                    jobId: "JOB-2024-001"
+                    status: "ACCEPTED"
+                    message: "Trade capture job accepted for processing"
+                    estimatedCompletionTime: "2024-01-31T10:31:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /trades/capture/batch:
+    post:
+      tags:
+        - Trade Capture
+      summary: Capture and enrich multiple trades (batch)
+      description: |
+        Captures and enriches multiple trades in a single request. Trades are grouped by
+        partition key (Account/Book + Security) and processed in parallel where possible,
+        while maintaining sequence within each partition.
+      operationId: captureTradesBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchTradeCaptureRequest'
+            examples:
+              batchExample:
+                summary: Batch Trade Capture
+                value:
+                  requests:
+                    - tradeId: "TRADE-2024-001"
+                      accountId: "ACC-001"
+                      bookId: "BOOK-001"
+                      securityId: "US0378331005"
+                      source: "AUTOMATED"
+                      tradeLots:
+                        - lotIdentifier:
+                            - identifier: "LOT-001"
+                              identifierType: "INTERNAL"
+                          priceQuantity:
+                            - quantity:
+                                value: 10000
+                                unit:
+                                  financialUnit: "Shares"
+                            price:
+                              value: 150.25
+                              unit:
+                                currency: "USD"
+                      tradeDate: "2024-01-31"
+                    - tradeId: "TRADE-2024-002"
+                      accountId: "ACC-002"
+                      bookId: "BOOK-002"
+                      securityId: "US5949181045"
+                      source: "AUTOMATED"
+                      tradeLots:
+                        - lotIdentifier:
+                            - identifier: "LOT-002"
+                              identifierType: "INTERNAL"
+                          priceQuantity:
+                            - quantity:
+                                value: 5000
+                                unit:
+                                  financialUnit: "Shares"
+                            price:
+                              value: 200.50
+                              unit:
+                                currency: "USD"
+                      tradeDate: "2024-01-31"
+      responses:
+        '200':
+          description: Batch trade capture completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchTradeCaptureResponse'
+        '207':
+          description: Multi-status - Some trades captured successfully, others failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchTradeCaptureResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /trades/capture/status/{jobId}:
+    get:
+      tags:
+        - Trade Capture
+      summary: Get async job status
+      description: |
+        Retrieves the status of an asynchronous trade capture job.
+      operationId: getAsyncJobStatus
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          description: Job identifier returned from async capture endpoint
+          schema:
+            type: string
+          example: "JOB-2024-001"
+      responses:
+        '200':
+          description: Job status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncJobStatus'
+              examples:
+                inProgress:
+                  summary: Job In Progress
+                  value:
+                    jobId: "JOB-2024-001"
+                    status: "IN_PROGRESS"
+                    progress: 50
+                    message: "Processing trade capture"
+                completed:
+                  summary: Job Completed
+                  value:
+                    jobId: "JOB-2024-001"
+                    status: "COMPLETED"
+                    progress: 100
+                    message: "Trade capture completed successfully"
+                    result:
+                      $ref: '#/components/schemas/TradeCaptureResponse'
+                failed:
+                  summary: Job Failed
+                  value:
+                    jobId: "JOB-2024-001"
+                    status: "FAILED"
+                    progress: 0
+                    message: "Trade capture failed"
+                    error:
+                      code: "VALIDATION_ERROR"
+                      message: "Invalid trade data"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /trades/capture/{tradeId}:
+    get:
+      tags:
+        - Trade Capture
+      summary: Get SwapBlotter by trade ID
+      description: |
+        Retrieves the SwapBlotter for a previously captured trade by its identifier.
+      operationId: getSwapBlotterByTradeId
+      parameters:
+        - name: tradeId
+          in: path
+          required: true
+          description: Unique trade identifier
+          schema:
+            type: string
+          example: "TRADE-2024-001"
+        - name: asOfDate
+          in: query
+          required: false
+          description: As-of date for retrieving SwapBlotter state (ISO 8601)
+          schema:
+            type: string
+            format: date
+          example: "2024-01-31"
+      responses:
+        '200':
+          description: SwapBlotter retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwapBlotter'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /trades/manual-entry:
+    post:
+      tags:
+        - Manual Entry
+      summary: Manual trade entry
+      description: |
+        Accepts a manually entered trade, validates it, serializes to protobuf, and publishes
+        to the Solace queue for processing. This endpoint is used by the manual trade entry screen.
+        
+        The trade is marked with source = MANUAL and will be evaluated by workflow rules to
+        determine if approval is required.
+      operationId: manualTradeEntry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualTradeEntryRequest'
+            examples:
+              manualEntryExample:
+                summary: Manual Trade Entry
+                value:
+                  tradeId: "TRADE-MANUAL-001"
+                  accountId: "ACC-001"
+                  bookId: "BOOK-001"
+                  securityId: "US0378331005"
+                  source: "MANUAL"
+                  tradeLots:
+                    - lotIdentifier:
+                        - identifier: "LOT-MANUAL-001"
+                          identifierType: "INTERNAL"
+                      priceQuantity:
+                        - quantity:
+                            value: 5000
+                            unit:
+                              financialUnit: "Shares"
+                          price:
+                            value: 150.25
+                            unit:
+                              currency: "USD"
+                  tradeDate: "2024-01-31"
+                  counterpartyIds:
+                    - "PARTY-A"
+                    - "PARTY-B"
+                  enteredBy: "user123"
+                  entryTimestamp: "2024-01-31T10:00:00Z"
+      responses:
+        '202':
+          description: Manual trade entry accepted and queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManualTradeEntryResponse'
+              examples:
+                accepted:
+                  summary: Trade Accepted
+                  value:
+                    tradeId: "TRADE-MANUAL-001"
+                    status: "ACCEPTED"
+                    message: "Manual trade entry accepted and queued for processing"
+                    queueMessageId: "MSG-2024-001"
+                    estimatedProcessingTime: "2024-01-31T10:01:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /rules/economic:
+    post:
+      tags:
+        - Rules
+      summary: Add or update economic rule
+      description: |
+        Adds a new economic rule or updates an existing one. Economic rules determine payout schedules,
+        day counts, resetting behaviors based on product attributes. Rules are received via API integration
+        from external rule management service and cached in-memory for performance.
+      operationId: addOrUpdateEconomicRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EconomicRule'
+      responses:
+        '200':
+          description: Economic rule added/updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /rules/non-economic:
+    post:
+      tags:
+        - Rules
+      summary: Add or update non-economic rule
+      description: |
+        Adds a new non-economic rule or updates an existing one. Non-economic rules handle legal entities,
+        documentation clauses, and regulatory flags. Rules are received via API integration from external
+        rule management service and cached in-memory for performance.
+      operationId: addOrUpdateNonEconomicRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NonEconomicRule'
+      responses:
+        '200':
+          description: Non-economic rule added/updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /rules/workflow:
+    post:
+      tags:
+        - Rules
+      summary: Add or update workflow rule
+      description: |
+        Adds a new workflow rule or updates an existing one. Workflow rules determine if trade is manual
+        vs automated, approval requirements, routing decisions. Rules can be received via API integration
+        or loaded from configuration files.
+      operationId: addOrUpdateWorkflowRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowRule'
+      responses:
+        '200':
+          description: Workflow rule added/updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /rules:
+    get:
+      tags:
+        - Rules
+      summary: List all active rules
+      description: |
+        Retrieves all active rules (economic, non-economic, and workflow). Rules are cached in-memory
+        and can be filtered by type.
+      operationId: listRules
+      parameters:
+        - name: ruleType
+          in: query
+          required: false
+          description: Filter by rule type (ECONOMIC, NON_ECONOMIC, WORKFLOW)
+          schema:
+            type: string
+            enum: [ECONOMIC, NON_ECONOMIC, WORKFLOW]
+        - name: enabled
+          in: query
+          required: false
+          description: Filter by enabled status
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Rules retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleListResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /rules/{ruleId}:
+    get:
+      tags:
+        - Rules
+      summary: Get specific rule by ID
+      description: |
+        Retrieves a specific rule by its identifier.
+      operationId: getRuleById
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          description: Unique rule identifier
+          schema:
+            type: string
+          example: "ECONOMIC_RULE_001"
+      responses:
+        '200':
+          description: Rule retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - Rules
+      summary: Delete or disable rule
+      description: |
+        Deletes or disables a rule. Disabled rules are not evaluated during trade processing.
+      operationId: deleteRule
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          description: Unique rule identifier
+          schema:
+            type: string
+          example: "ECONOMIC_RULE_001"
+      responses:
+        '200':
+          description: Rule deleted/disabled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /rules/batch:
+    post:
+      tags:
+        - Rules
+      summary: Bulk update rules
+      description: |
+        Updates multiple rules in a single request. Useful for bulk rule updates from external
+        rule management service.
+      operationId: batchUpdateRules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchRuleUpdateRequest'
+      responses:
+        '200':
+          description: Batch rule update completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchRuleUpdateResponse'
+        '207':
+          description: Multi-status - Some rules updated successfully, others failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchRuleUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: |
+        Returns the health status of the trade capture and enrichment service.
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              examples:
+                healthy:
+                  summary: Service Healthy
+                  value:
+                    status: "UP"
+                    version: "1.0.0"
+                    uptime: "2d 5h 30m"
+                    components:
+                      database:
+                        status: "UP"
+                      solace:
+                        status: "UP"
+                      enrichmentService:
+                        status: "UP"
+                    metrics:
+                      tradesProcessedToday: 125000
+                      averageProcessingTimeMs: 150
+                      queueDepth: 500
+        '503':
+          description: Service is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+components:
+  schemas:
+    TradeCaptureRequest:
+      type: object
+      required:
+        - tradeId
+        - accountId
+        - bookId
+        - securityId
+        - source
+        - tradeLots
+        - tradeDate
+      properties:
+        tradeId:
+          type: string
+          description: Unique identifier for the trade
+          example: "TRADE-2024-001"
+        accountId:
+          type: string
+          description: Account identifier
+          example: "ACC-001"
+        bookId:
+          type: string
+          description: Book identifier
+          example: "BOOK-001"
+        securityId:
+          type: string
+          description: Security identifier (ISIN, CUSIP, etc.)
+          example: "US0378331005"
+        source:
+          $ref: '#/components/schemas/TradeSource'
+        tradeLots:
+          type: array
+          description: List of trade lots
+          items:
+            $ref: '#/components/schemas/TradeLot'
+          minItems: 1
+        tradeDate:
+          type: string
+          format: date
+          description: Trade date (ISO 8601)
+          example: "2024-01-31"
+        counterpartyIds:
+          type: array
+          description: List of counterparty identifiers
+          items:
+            type: string
+          minItems: 1
+          maxItems: 2
+          example: ["PARTY-A", "PARTY-B"]
+        metadata:
+          type: object
+          description: Additional metadata
+          additionalProperties: true
+
+    ManualTradeEntryRequest:
+      allOf:
+        - $ref: '#/components/schemas/TradeCaptureRequest'
+        - type: object
+          required:
+            - enteredBy
+            - entryTimestamp
+          properties:
+            enteredBy:
+              type: string
+              description: User ID who entered the trade
+              example: "user123"
+            entryTimestamp:
+              type: string
+              format: date-time
+              description: Timestamp when trade was entered (ISO 8601)
+              example: "2024-01-31T10:00:00Z"
+
+    TradeLot:
+      type: object
+      required:
+        - priceQuantity
+      properties:
+        lotIdentifier:
+          type: array
+          description: Identifiers for the lot
+          items:
+            $ref: '#/components/schemas/Identifier'
+        priceQuantity:
+          type: array
+          description: Price and quantity information
+          items:
+            $ref: '#/components/schemas/PriceQuantity'
+          minItems: 1
+
+    Identifier:
+      type: object
+      required:
+        - identifier
+        - identifierType
+      properties:
+        identifier:
+          type: string
+          example: "LOT-001"
+        identifierType:
+          type: string
+          enum: [INTERNAL, EXTERNAL, ISIN, CUSIP, SEDOL, TICKER]
+          example: "INTERNAL"
+
+    PriceQuantity:
+      type: object
+      properties:
+        quantity:
+          type: array
+          items:
+            $ref: '#/components/schemas/Quantity'
+        price:
+          type: array
+          items:
+            $ref: '#/components/schemas/Price'
+
+    Quantity:
+      type: object
+      required:
+        - value
+        - unit
+      properties:
+        value:
+          type: number
+          format: decimal
+          example: 10000
+        unit:
+          $ref: '#/components/schemas/Unit'
+
+    Price:
+      type: object
+      required:
+        - value
+        - unit
+      properties:
+        value:
+          type: number
+          format: decimal
+          example: 150.25
+        unit:
+          $ref: '#/components/schemas/Unit'
+
+    Unit:
+      type: object
+      properties:
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          example: "USD"
+        financialUnit:
+          type: string
+          enum: [Shares, Contracts, Units]
+          example: "Shares"
+
+    TradeCaptureResponse:
+      type: object
+      required:
+        - swapBlotter
+        - status
+      properties:
+        swapBlotter:
+          $ref: '#/components/schemas/SwapBlotter'
+        status:
+          $ref: '#/components/schemas/ProcessingStatus'
+        message:
+          type: string
+          description: Optional status message
+        errors:
+          type: array
+          description: Warnings or errors encountered during processing
+          items:
+            $ref: '#/components/schemas/ProcessingError'
+
+    SwapBlotter:
+      type: object
+      required:
+        - tradeId
+        - partitionKey
+        - tradeLots
+        - contract
+        - state
+        - enrichmentStatus
+        - workflowStatus
+      properties:
+        tradeId:
+          type: string
+          description: Unique trade identifier
+          example: "TRADE-2024-001"
+        partitionKey:
+          type: string
+          description: Partition key (Account/Book + Security) for sequencing
+          example: "ACC-001_BOOK-001_US0378331005"
+        tradeLots:
+          type: array
+          description: List of trade lots (CDM TradeLot)
+          items:
+            $ref: '#/components/schemas/TradeLot'
+        contract:
+          $ref: '#/components/schemas/Contract'
+        state:
+          $ref: '#/components/schemas/State'
+        enrichmentStatus:
+          $ref: '#/components/schemas/EnrichmentStatus'
+        workflowStatus:
+          $ref: '#/components/schemas/WorkflowStatus'
+        processingMetadata:
+          $ref: '#/components/schemas/ProcessingMetadata'
+
+    Contract:
+      type: object
+      description: Contract (NonTransferableProduct wrapper) with EconomicTerms
+      required:
+        - identifier
+        - taxonomy
+        - economicTerms
+      properties:
+        identifier:
+          type: array
+          description: Product identifiers
+          items:
+            $ref: '#/components/schemas/Identifier'
+        taxonomy:
+          type: array
+          description: Product taxonomy
+          items:
+            $ref: '#/components/schemas/ProductTaxonomy'
+        economicTerms:
+          $ref: '#/components/schemas/EconomicTerms'
+
+    ProductTaxonomy:
+      type: object
+      properties:
+        primaryAssetClass:
+          type: string
+          enum: [Equity, FixedIncome, Commodity, Currency, Credit, Other]
+          example: "Equity"
+
+    EconomicTerms:
+      type: object
+      description: Economic terms including payouts (PerformancePayout, InterestPayout)
+      properties:
+        effectiveDate:
+          type: string
+          format: date
+          example: "2024-01-31"
+        terminationDate:
+          type: string
+          format: date
+          example: "2025-01-31"
+        payout:
+          type: array
+          description: List of payouts (PerformancePayout, InterestPayout, etc.)
+          items:
+            type: object
+            description: Payout union type (can be PerformancePayout, InterestPayout, etc.)
+            properties:
+              performancePayout:
+                type: object
+                description: Performance payout (equity leg)
+                properties:
+                  payerReceiver:
+                    $ref: '#/components/schemas/PayerReceiver'
+                  priceQuantity:
+                    type: object
+                    properties:
+                      priceQuantity:
+                        $ref: '#/components/schemas/PriceQuantity'
+                  underlier:
+                    type: object
+                    properties:
+                      observable:
+                        type: object
+                        properties:
+                          asset:
+                            type: object
+                            properties:
+                              security:
+                                type: object
+                                properties:
+                                  identifier:
+                                    type: array
+                                    items:
+                                      $ref: '#/components/schemas/Identifier'
+              interestRatePayout:
+                type: object
+                description: Interest rate payout (interest leg)
+                properties:
+                  payerReceiver:
+                    $ref: '#/components/schemas/PayerReceiver'
+                  priceQuantity:
+                    type: object
+                    properties:
+                      priceQuantity:
+                        $ref: '#/components/schemas/PriceQuantity'
+                  fixedRate:
+                    type: number
+                    format: decimal
+                    example: 0.025
+                  floatingRate:
+                    type: object
+                    description: Floating rate specification
+
+    PayerReceiver:
+      type: object
+      properties:
+        payer:
+          type: string
+          example: "PARTY-A"
+        receiver:
+          type: string
+          example: "PARTY-B"
+
+    State:
+      type: object
+      description: CDM State with PositionStatusEnum
+      properties:
+        positionState:
+          $ref: '#/components/schemas/PositionStatusEnum'
+        closedState:
+          type: object
+          description: Closed state information (if position is closed)
+
+    PositionStatusEnum:
+      type: string
+      enum: [Executed, Formed, Settled, Cancelled, Closed]
+      description: CDM PositionStatusEnum values
+      example: "Executed"
+
+    BatchTradeCaptureRequest:
+      type: object
+      required:
+        - requests
+      properties:
+        requests:
+          type: array
+          description: List of trade capture requests
+          items:
+            $ref: '#/components/schemas/TradeCaptureRequest'
+          minItems: 1
+          maxItems: 100
+
+    BatchTradeCaptureResponse:
+      type: object
+      required:
+        - results
+        - summary
+      properties:
+        results:
+          type: array
+          description: Individual results for each request
+          items:
+            type: object
+            required:
+              - requestIndex
+              - status
+            properties:
+              requestIndex:
+                type: integer
+                description: Index of the request in the batch
+              status:
+                $ref: '#/components/schemas/ProcessingStatus'
+              response:
+                $ref: '#/components/schemas/TradeCaptureResponse'
+              error:
+                $ref: '#/components/schemas/ErrorResponse'
+        summary:
+          type: object
+          required:
+            - total
+            - success
+            - failed
+          properties:
+            total:
+              type: integer
+              description: Total number of requests
+            success:
+              type: integer
+              description: Number of successful captures
+            failed:
+              type: integer
+              description: Number of failed captures
+
+    AsyncJobResponse:
+      type: object
+      required:
+        - jobId
+        - status
+      properties:
+        jobId:
+          type: string
+          description: Unique job identifier
+          example: "JOB-2024-001"
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        message:
+          type: string
+          description: Status message
+        estimatedCompletionTime:
+          type: string
+          format: date-time
+          description: Estimated completion time
+
+    AsyncJobStatus:
+      type: object
+      required:
+        - jobId
+        - status
+      properties:
+        jobId:
+          type: string
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Progress percentage
+        message:
+          type: string
+        result:
+          $ref: '#/components/schemas/TradeCaptureResponse'
+        error:
+          $ref: '#/components/schemas/ErrorResponse'
+
+    ManualTradeEntryResponse:
+      type: object
+      required:
+        - tradeId
+        - status
+      properties:
+        tradeId:
+          type: string
+        status:
+          $ref: '#/components/schemas/ProcessingStatus'
+        message:
+          type: string
+        queueMessageId:
+          type: string
+          description: Solace queue message ID
+        estimatedProcessingTime:
+          type: string
+          format: date-time
+
+    ProcessingMetadata:
+      type: object
+      properties:
+        processedAt:
+          type: string
+          format: date-time
+        processingTimeMs:
+          type: integer
+        rulesApplied:
+          type: array
+          items:
+            type: string
+          description: List of rule IDs that were applied
+        enrichmentSources:
+          type: array
+          items:
+            type: string
+          description: Sources used for enrichment
+
+    ProcessingError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        severity:
+          $ref: '#/components/schemas/ErrorSeverity'
+        details:
+          type: object
+          additionalProperties: true
+
+    TradeSource:
+      type: string
+      enum: [AUTOMATED, MANUAL]
+      description: Source of the trade
+      example: "AUTOMATED"
+
+    ProcessingStatus:
+      type: string
+      enum: [SUCCESS, FAILED, PARTIAL, PENDING]
+      description: Processing status
+      example: "SUCCESS"
+
+    EnrichmentStatus:
+      type: string
+      enum: [COMPLETE, PARTIAL, FAILED, PENDING]
+      description: Enrichment status
+      example: "COMPLETE"
+
+    WorkflowStatus:
+      type: string
+      enum: [APPROVED, PENDING_APPROVAL, REJECTED]
+      description: Workflow status determined by rules
+      example: "APPROVED"
+
+    JobStatus:
+      type: string
+      enum: [ACCEPTED, IN_PROGRESS, COMPLETED, FAILED, CANCELLED]
+      description: Async job status
+      example: "ACCEPTED"
+
+    ErrorSeverity:
+      type: string
+      enum: [ERROR, WARNING, INFO]
+      description: Error severity level
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN, DEGRADED]
+        version:
+          type: string
+        uptime:
+          type: string
+        components:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+        metrics:
+          type: object
+          additionalProperties: true
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Invalid trade data"
+            details:
+              type: object
+              additionalProperties: true
+            timestamp:
+              type: string
+              format: date-time
+            path:
+              type: string
+
+    EconomicRule:
+      type: object
+      required:
+        - id
+        - name
+        - priority
+        - enabled
+        - criteria
+        - actions
+        - target
+      properties:
+        id:
+          type: string
+          description: Unique rule identifier
+          example: "ECONOMIC_RULE_001"
+        name:
+          type: string
+          description: Human-readable rule name
+          example: "Set Day Count Fraction by Currency"
+        description:
+          type: string
+          description: Rule description
+        ruleType:
+          type: string
+          enum: [ECONOMIC]
+          description: Rule type identifier
+        target:
+          type: string
+          enum: [ECONOMIC_TERMS, PERFORMANCE_PAYOUT, INTEREST_PAYOUT, PAYOUT_SCHEDULE, DAY_COUNT, RESET_BEHAVIOR]
+          description: What part of the economic terms this rule affects
+          example: "DAY_COUNT"
+        priority:
+          type: integer
+          description: Rule priority (lower number = higher priority)
+          minimum: 1
+          maximum: 1000
+          example: 100
+        enabled:
+          type: boolean
+          description: Whether the rule is enabled
+          example: true
+        criteria:
+          type: array
+          description: List of criteria that must all be met for the rule to apply
+          items:
+            $ref: '#/components/schemas/RuleCriterion'
+          minItems: 1
+        actions:
+          type: array
+          description: Actions to execute when criteria are met
+          items:
+            $ref: '#/components/schemas/RuleAction'
+          minItems: 1
+
+    NonEconomicRule:
+      type: object
+      required:
+        - id
+        - name
+        - priority
+        - enabled
+        - criteria
+        - actions
+        - target
+      properties:
+        id:
+          type: string
+          description: Unique rule identifier
+          example: "NON_ECONOMIC_RULE_001"
+        name:
+          type: string
+          description: Human-readable rule name
+          example: "Set Legal Entity from Account"
+        description:
+          type: string
+          description: Rule description
+        ruleType:
+          type: string
+          enum: [NON_ECONOMIC]
+          description: Rule type identifier
+        target:
+          type: string
+          enum: [LEGAL_ENTITY, DOCUMENTATION, REGULATORY_FLAG, COUNTERPARTY, ACCOUNT]
+          description: What part of the contract this rule affects
+          example: "LEGAL_ENTITY"
+        priority:
+          type: integer
+          description: Rule priority (lower number = higher priority)
+          minimum: 1
+          maximum: 1000
+          example: 100
+        enabled:
+          type: boolean
+          description: Whether the rule is enabled
+          example: true
+        criteria:
+          type: array
+          description: List of criteria that must all be met for the rule to apply
+          items:
+            $ref: '#/components/schemas/RuleCriterion'
+          minItems: 1
+        actions:
+          type: array
+          description: Actions to execute when criteria are met
+          items:
+            $ref: '#/components/schemas/RuleAction'
+          minItems: 1
+
+    WorkflowRule:
+      type: object
+      required:
+        - id
+        - name
+        - priority
+        - enabled
+        - criteria
+        - actions
+        - target
+      properties:
+        id:
+          type: string
+          description: Unique rule identifier
+          example: "WORKFLOW_RULE_001"
+        name:
+          type: string
+          description: Human-readable rule name
+          example: "Require Approval for Manual Trades"
+        description:
+          type: string
+          description: Rule description
+        ruleType:
+          type: string
+          enum: [WORKFLOW]
+          description: Rule type identifier
+        target:
+          type: string
+          enum: [WORKFLOW_STATUS, APPROVAL_REQUIRED, ROUTING]
+          description: What workflow aspect this rule affects
+          example: "WORKFLOW_STATUS"
+        priority:
+          type: integer
+          description: Rule priority (lower number = higher priority)
+          minimum: 1
+          maximum: 1000
+          example: 100
+        enabled:
+          type: boolean
+          description: Whether the rule is enabled
+          example: true
+        criteria:
+          type: array
+          description: List of criteria that must all be met for the rule to apply
+          items:
+            $ref: '#/components/schemas/RuleCriterion'
+          minItems: 1
+        actions:
+          type: array
+          description: Actions to execute when criteria are met
+          items:
+            $ref: '#/components/schemas/RuleAction'
+          minItems: 1
+
+    RuleCriterion:
+      type: object
+      required:
+        - field
+        - operator
+        - value
+      properties:
+        field:
+          type: string
+          description: Field path to evaluate (e.g., 'account.type', 'trade.amount', 'security.assetClass')
+          example: "account.type"
+        operator:
+          type: string
+          enum: [EQUALS, NOT_EQUALS, GREATER_THAN, GREATER_THAN_OR_EQUAL, LESS_THAN, LESS_THAN_OR_EQUAL, IN, NOT_IN, CONTAINS, NOT_CONTAINS, REGEX, EXISTS, NOT_EXISTS]
+          description: Comparison operator
+          example: "EQUALS"
+        value:
+          description: Value to compare against (type depends on field and operator)
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: array
+            - type: "null"
+          example: "RETAIL"
+        logicalOperator:
+          type: string
+          enum: [AND, OR]
+          description: Logical operator to combine with next criterion (default: AND)
+          default: "AND"
+
+    RuleAction:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [SET_FIELD, ADD_PAYOUT, SET_DAY_COUNT, SET_RESET_BEHAVIOR, SET_WORKFLOW_STATUS, SET_APPROVAL_REQUIRED, SET_REGULATORY_FLAG, ENRICH_FIELD, VALIDATE]
+          description: Type of action to execute
+          example: "SET_DAY_COUNT"
+        target:
+          type: string
+          description: Target field or object to modify
+          example: "economicTerms.interestRatePayout.dayCountFraction"
+        value:
+          description: Value to set (type depends on action type)
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: object
+            - type: array
+          example: "ACT/360"
+        parameters:
+          type: object
+          description: Additional parameters for the action
+          additionalProperties: true
+
+    RuleResponse:
+      type: object
+      required:
+        - ruleId
+        - status
+      properties:
+        ruleId:
+          type: string
+          description: Unique rule identifier
+          example: "ECONOMIC_RULE_001"
+        status:
+          type: string
+          enum: [CREATED, UPDATED, DELETED, DISABLED]
+          description: Status of the rule operation
+          example: "UPDATED"
+        message:
+          type: string
+          description: Status message
+        rule:
+          description: The rule object (if applicable)
+          oneOf:
+            - $ref: '#/components/schemas/EconomicRule'
+            - $ref: '#/components/schemas/NonEconomicRule'
+            - $ref: '#/components/schemas/WorkflowRule'
+
+    RuleListResponse:
+      type: object
+      required:
+        - rules
+      properties:
+        rules:
+          type: array
+          description: List of rules
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/EconomicRule'
+              - $ref: '#/components/schemas/NonEconomicRule'
+              - $ref: '#/components/schemas/WorkflowRule'
+        summary:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: Total number of rules
+            economic:
+              type: integer
+              description: Number of economic rules
+            nonEconomic:
+              type: integer
+              description: Number of non-economic rules
+            workflow:
+              type: integer
+              description: Number of workflow rules
+            enabled:
+              type: integer
+              description: Number of enabled rules
+            disabled:
+              type: integer
+              description: Number of disabled rules
+
+    BatchRuleUpdateRequest:
+      type: object
+      required:
+        - rules
+      properties:
+        rules:
+          type: array
+          description: List of rules to update
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/EconomicRule'
+              - $ref: '#/components/schemas/NonEconomicRule'
+              - $ref: '#/components/schemas/WorkflowRule'
+          minItems: 1
+          maxItems: 100
+
+    BatchRuleUpdateResponse:
+      type: object
+      required:
+        - results
+        - summary
+      properties:
+        results:
+          type: array
+          description: Individual results for each rule
+          items:
+            type: object
+            required:
+              - ruleId
+              - status
+            properties:
+              ruleId:
+                type: string
+              status:
+                type: string
+                enum: [CREATED, UPDATED, FAILED]
+              error:
+                $ref: '#/components/schemas/ErrorResponse'
+        summary:
+          type: object
+          required:
+            - total
+            - success
+            - failed
+          properties:
+            total:
+              type: integer
+              description: Total number of rules
+            success:
+              type: integer
+              description: Number of successfully updated rules
+            failed:
+              type: integer
+              description: Number of failed updates
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid input parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            badRequest:
+              value:
+                error:
+                  code: "BAD_REQUEST"
+                  message: "Invalid request parameters"
+                  timestamp: "2024-01-31T10:30:00Z"
+                  path: "/api/v1/trades/capture"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            notFound:
+              value:
+                error:
+                  code: "NOT_FOUND"
+                  message: "Trade not found"
+                  timestamp: "2024-01-31T10:30:00Z"
+                  path: "/api/v1/trades/capture/TRADE-2024-001"
+
+    ValidationError:
+      description: Validation error - business rule validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            validationError:
+              value:
+                error:
+                  code: "VALIDATION_ERROR"
+                  message: "Trade validation failed"
+                  details:
+                    field: "securityId"
+                    reason: "Security not found in reference data"
+                  timestamp: "2024-01-31T10:30:00Z"
+                  path: "/api/v1/trades/capture"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            internalError:
+              value:
+                error:
+                  code: "INTERNAL_ERROR"
+                  message: "An unexpected error occurred"
+                  timestamp: "2024-01-31T10:30:00Z"
+                  path: "/api/v1/trades/capture"
+
+    ServiceUnavailable:
+      description: Service unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            serviceUnavailable:
+              value:
+                error:
+                  code: "SERVICE_UNAVAILABLE"
+                  message: "Service temporarily unavailable"
+                  timestamp: "2024-01-31T10:30:00Z"
+                  path: "/api/v1/trades/capture"
+
