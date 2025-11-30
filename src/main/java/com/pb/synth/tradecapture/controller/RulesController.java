@@ -2,6 +2,7 @@ package com.pb.synth.tradecapture.controller;
 
 import com.pb.synth.tradecapture.model.Rule;
 import com.pb.synth.tradecapture.repository.RulesRepository;
+import com.pb.synth.tradecapture.service.cache.RulesCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,7 @@ import java.util.List;
 public class RulesController {
 
     private final RulesRepository rulesRepository;
+    private final RulesCacheService rulesCacheService;
 
     /**
      * Add or update economic rule.
@@ -28,6 +30,8 @@ public class RulesController {
     public ResponseEntity<Rule> createEconomicRule(@RequestBody Rule rule) {
         rule.setRuleType("ECONOMIC");
         rulesRepository.saveRule(rule);
+        // Invalidate cache when rules are updated
+        rulesCacheService.invalidateRule(rule.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(rule);
     }
 
@@ -38,6 +42,8 @@ public class RulesController {
     public ResponseEntity<Rule> createNonEconomicRule(@RequestBody Rule rule) {
         rule.setRuleType("NON_ECONOMIC");
         rulesRepository.saveRule(rule);
+        // Invalidate cache when rules are updated
+        rulesCacheService.invalidateRule(rule.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(rule);
     }
 
@@ -48,6 +54,8 @@ public class RulesController {
     public ResponseEntity<Rule> createWorkflowRule(@RequestBody Rule rule) {
         rule.setRuleType("WORKFLOW");
         rulesRepository.saveRule(rule);
+        // Invalidate cache when rules are updated
+        rulesCacheService.invalidateRule(rule.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(rule);
     }
 
@@ -83,6 +91,8 @@ public class RulesController {
     @DeleteMapping("/{ruleId}")
     public ResponseEntity<Void> deleteRule(@PathVariable String ruleId) {
         rulesRepository.deleteRule(ruleId);
+        // Invalidate cache when rules are deleted
+        rulesCacheService.invalidateRule(ruleId);
         return ResponseEntity.noContent().build();
     }
 

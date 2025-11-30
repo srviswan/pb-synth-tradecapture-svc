@@ -18,6 +18,9 @@ services:
       - KAFKA_ENABLED=true
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - SOLACE_ENABLED=false
+      - SECURITY_MASTER_MOCK=true
+      - ACCOUNT_SERVICE_MOCK=true
+      - APPROVAL_WORKFLOW_MOCK=true
     depends_on:
       sqlserver:
         condition: service_healthy

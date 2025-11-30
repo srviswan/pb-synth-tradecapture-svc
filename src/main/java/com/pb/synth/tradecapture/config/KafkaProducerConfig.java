@@ -41,6 +41,7 @@ public class KafkaProducerConfig {
     }
     
     @Bean
+    @org.springframework.context.annotation.Primary
     public KafkaTemplate<String, byte[]> kafkaTemplate() {
         return new KafkaTemplate<>(producerFactory());
     }

@@ -37,8 +37,12 @@ message TradeCaptureMessage {
   // Trade date (ISO 8601 format: YYYY-MM-DD)
   string trade_date = 8;
   
-  // Timestamp when message was created (ISO 8601 format)
+  // Timestamp when trade was executed (ISO 8601 format)
   string timestamp = 9;
+  
+  // Timestamp when trade was booked in upstream system (ISO 8601 format)
+  // Used for out-of-order detection and time window checks
+  string booking_timestamp = 15;
   
   // List of trade lots
   repeated TradeLot trade_lots = 10;

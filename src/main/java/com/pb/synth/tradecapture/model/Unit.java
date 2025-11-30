@@ -8,6 +8,12 @@ import lombok.NoArgsConstructor;
 
 /**
  * Unit can be currency or financial unit (shares, contracts, etc.).
+ * 
+ * Supports both string and object formats:
+ * - String: "SHARES", "USD" (for convenience)
+ * - Object: {"currency": "USD"} or {"financialUnit": "Shares"}
+ * 
+ * Note: Custom deserializer is registered in ObjectMapperConfig
  */
 @Data
 @Builder

@@ -1,0 +1,221 @@
+# Docker Compose configuration for horizontal scaling
+# This demonstrates how to run multiple instances behind a load balancer
+
+services:
+  # Load Balancer (NGINX)
+  nginx:
+    image: nginx:alpine
+    container_name: pb-synth-tradecapture-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - trade-capture-service-1
+      - trade-capture-service-2
+      - trade-capture-service-3
+    networks:
+      - tradecapture-network
+    restart: unless-stopped
+
+  # Service Instance 1
+  trade-capture-service-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pb-synth-tradecapture-svc:latest
+    container_name: pb-synth-tradecapture-svc-1
+    environment:
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+      - DATABASE_URL=${DATABASE_URL:-jdbc:sqlserver://sqlserver:1433;databaseName=tradecapture;encrypt=true;trustServerCertificate=true}
+      - DATABASE_USERNAME=${DATABASE_USERNAME:-sa}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-YourStrong@Passw0rd}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - KAFKA_ENABLED=true
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - SOLACE_ENABLED=false
+      - SECURITY_MASTER_MOCK=true
+      - ACCOUNT_SERVICE_MOCK=true
+      - APPROVAL_WORKFLOW_MOCK=true
+      - SERVER_PORT=8080
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - tradecapture-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+
+  # Service Instance 2
+  trade-capture-service-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pb-synth-tradecapture-svc:latest
+    container_name: pb-synth-tradecapture-svc-2
+    environment:
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+      - DATABASE_URL=${DATABASE_URL:-jdbc:sqlserver://sqlserver:1433;databaseName=tradecapture;encrypt=true;trustServerCertificate=true}
+      - DATABASE_USERNAME=${DATABASE_USERNAME:-sa}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-YourStrong@Passw0rd}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - KAFKA_ENABLED=true
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - SOLACE_ENABLED=false
+      - SECURITY_MASTER_MOCK=true
+      - ACCOUNT_SERVICE_MOCK=true
+      - APPROVAL_WORKFLOW_MOCK=true
+      - SERVER_PORT=8080
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - tradecapture-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+
+  # Service Instance 3
+  trade-capture-service-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pb-synth-tradecapture-svc:latest
+    container_name: pb-synth-tradecapture-svc-3
+    environment:
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+      - DATABASE_URL=${DATABASE_URL:-jdbc:sqlserver://sqlserver:1433;databaseName=tradecapture;encrypt=true;trustServerCertificate=true}
+      - DATABASE_USERNAME=${DATABASE_USERNAME:-sa}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-YourStrong@Passw0rd}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - KAFKA_ENABLED=true
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - SOLACE_ENABLED=false
+      - SECURITY_MASTER_MOCK=true
+      - ACCOUNT_SERVICE_MOCK=true
+      - APPROVAL_WORKFLOW_MOCK=true
+      - SERVER_PORT=8080
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - tradecapture-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+
+  # Shared infrastructure (same as docker-compose.yml)
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    container_name: pb-synth-tradecapture-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=${DATABASE_PASSWORD:-YourStrong@Passw0rd}
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    networks:
+      - tradecapture-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStrong@Passw0rd' -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  redis:
+    image: redis:7-alpine
+    container_name: pb-synth-tradecapture-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - tradecapture-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: pb-synth-tradecapture-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - tradecapture-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: pb-synth-tradecapture-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - tradecapture-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+networks:
+  tradecapture-network:
+    driver: bridge
+
+volumes:
+  sqlserver-data:
+  redis-data:
+

@@ -1,8 +1,5 @@
-spring:
-  profiles:
-    include: test
-
 # All external services mocked
+# This profile extends test profile configuration
 services:
   security-master:
     mock: true

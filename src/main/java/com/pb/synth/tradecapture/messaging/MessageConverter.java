@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -43,6 +44,38 @@ public class MessageConverter {
                 .tradeLots(convertTradeLots(protoMessage.getTradeLotsList()))
                 .counterpartyIds(new ArrayList<>(protoMessage.getCounterpartyIdsList()))
                 .metadata(convertMetadata(protoMessage.getMetadataMap()));
+            
+            // Extract trade timestamp from protobuf message
+            if (!protoMessage.getTimestamp().isEmpty()) {
+                try {
+                    ZonedDateTime timestamp = ZonedDateTime.parse(protoMessage.getTimestamp(), TIMESTAMP_FORMATTER);
+                    builder.tradeTimestamp(timestamp);
+                } catch (Exception e) {
+                    log.warn("Error parsing timestamp from protobuf: {}", protoMessage.getTimestamp(), e);
+                    // Fallback to current time
+                    builder.tradeTimestamp(ZonedDateTime.now());
+                }
+            } else {
+                // If no timestamp in message, use current time
+                builder.tradeTimestamp(ZonedDateTime.now());
+            }
+            
+            // Extract booking timestamp from protobuf message (for out-of-order detection)
+            if (!protoMessage.getBookingTimestamp().isEmpty()) {
+                try {
+                    ZonedDateTime bookingTimestamp = ZonedDateTime.parse(protoMessage.getBookingTimestamp(), TIMESTAMP_FORMATTER);
+                    builder.bookingTimestamp(bookingTimestamp);
+                } catch (Exception e) {
+                    log.warn("Error parsing booking timestamp from protobuf: {}", protoMessage.getBookingTimestamp(), e);
+                    // Fallback: bookingTimestamp will be null, getBookingTimestamp() will use tradeTimestamp
+                }
+            }
+            // If booking timestamp not provided, getBookingTimestamp() will fall back to tradeTimestamp
+            
+            // Extract sequence number from protobuf message (incremental, assigned by upstream system)
+            if (protoMessage.getSequenceNumber() > 0) {
+                builder.sequenceNumber(protoMessage.getSequenceNumber());
+            }
             
             // Set idempotency key if provided
             if (!protoMessage.getIdempotencyKey().isEmpty()) {
@@ -94,6 +127,16 @@ public class MessageConverter {
                 .setTradeDate(request.getTradeDate().format(DATE_FORMATTER))
                 .setTimestamp(ZonedDateTime.now().format(TIMESTAMP_FORMATTER))
                 .addAllCounterpartyIds(request.getCounterpartyIds());
+            
+            // Set sequence number if provided
+            if (request.getSequenceNumber() != null) {
+                builder.setSequenceNumber(request.getSequenceNumber());
+            }
+            
+            // Set booking timestamp if provided
+            if (request.getBookingTimestamp() != null) {
+                builder.setBookingTimestamp(request.getBookingTimestamp().format(TIMESTAMP_FORMATTER));
+            }
             
             // Set idempotency key
             String idempotencyKey = request.getIdempotencyKey() != null 
@@ -157,6 +200,38 @@ public class MessageConverter {
         Map<String, Object> metadata = new HashMap<>();
         protoMetadata.forEach((key, value) -> metadata.put(key, value));
         return metadata;
+    }
+    
+    /**
+     * Convert SwapBlotter to protobuf SwapBlotterMessage.
+     * This is a placeholder - full implementation would convert all SwapBlotter fields.
+     */
+    public TradeCaptureProto.SwapBlotterMessage toSwapBlotterMessage(com.pb.synth.tradecapture.model.SwapBlotter swapBlotter) {
+        if (swapBlotter == null) {
+            throw new IllegalArgumentException("SwapBlotter cannot be null");
+        }
+        
+        try {
+            TradeCaptureProto.SwapBlotterMessage.Builder builder = 
+                TradeCaptureProto.SwapBlotterMessage.newBuilder()
+                    .setTradeId(swapBlotter.getTradeId())
+                    .setPartitionKey(swapBlotter.getPartitionKey());
+            
+            // TODO: Convert all SwapBlotter fields to protobuf
+            // This is a simplified version - full implementation would include:
+            // - Contract details
+            // - Economic terms
+            // - Performance payout
+            // - Interest payout
+            // - Processing metadata
+            // - State information
+            // - Timestamp (if field exists in proto)
+            
+            return builder.build();
+        } catch (Exception e) {
+            log.error("Error converting SwapBlotter to protobuf: {}", swapBlotter.getTradeId(), e);
+            throw new RuntimeException("Failed to convert SwapBlotter to protobuf message", e);
+        }
     }
 }
 

@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -53,9 +54,18 @@ public class TradeCaptureRequest {
     @JsonProperty("tradeDate")
     private LocalDate tradeDate;
 
+    @JsonProperty("tradeTimestamp")
+    private ZonedDateTime tradeTimestamp; // Optional - timestamp when trade was executed
+
+    @JsonProperty("bookingTimestamp")
+    private ZonedDateTime bookingTimestamp; // Timestamp when trade was booked in upstream system (for out-of-order detection)
+
     @NotNull(message = "counterpartyIds is required")
     @JsonProperty("counterpartyIds")
     private List<String> counterpartyIds;
+
+    @JsonProperty("sequenceNumber")
+    private Long sequenceNumber; // Incremental sequence number (1, 2, 3, ...) assigned by upstream system
 
     @JsonProperty("metadata")
     private Map<String, Object> metadata;
@@ -79,6 +89,28 @@ public class TradeCaptureRequest {
      */
     public String getIdempotencyKey() {
         return idempotencyKey != null ? idempotencyKey : tradeId;
+    }
+
+    /**
+     * Get sequence number (incremental, assigned by upstream system).
+     * Sequence numbers are incremental (1, 2, 3, 4, ...) and should be provided by the upstream system.
+     * If not provided, returns null (sequence validation will be skipped).
+     */
+    public Long getSequenceNumber() {
+        return sequenceNumber;
+    }
+    
+    /**
+     * Get booking timestamp (when trade was booked in upstream system).
+     * Used for out-of-order detection and time window checks.
+     * Falls back to tradeTimestamp if bookingTimestamp is not provided.
+     */
+    public ZonedDateTime getBookingTimestamp() {
+        if (bookingTimestamp != null) {
+            return bookingTimestamp;
+        }
+        // Fallback to tradeTimestamp if bookingTimestamp not provided
+        return tradeTimestamp;
     }
 }
 

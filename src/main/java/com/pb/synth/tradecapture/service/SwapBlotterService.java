@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
@@ -24,8 +25,9 @@ public class SwapBlotterService {
 
     /**
      * Save SwapBlotter.
+     * Uses REQUIRES_NEW to isolate deadlocks from outer transaction.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public SwapBlotterEntity saveSwapBlotter(SwapBlotter swapBlotter) {
         try {
             String json = objectMapper.writeValueAsString(swapBlotter);

@@ -1,8 +1,6 @@
 spring:
   application:
     name: pb-synth-tradecapture-svc-test
-  profiles:
-    active: test
   
   # Database configuration for tests (MS SQL Server)
   datasource:

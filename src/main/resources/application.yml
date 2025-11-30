@@ -12,7 +12,23 @@ spring:
     password: ${DATABASE_PASSWORD:YourStrong@Passw0rd}
     driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
     hikari:
-      connection-timeout: 30000
+      # Connection pool size - optimized for high concurrency and burst load
+      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:50}
+      minimum-idle: ${HIKARI_MIN_IDLE:20}
+      connection-timeout: ${HIKARI_CONNECTION_TIMEOUT:30000}
+      idle-timeout: ${HIKARI_IDLE_TIMEOUT:600000}
+      max-lifetime: ${HIKARI_MAX_LIFETIME:1800000}
+      leak-detection-threshold: ${HIKARI_LEAK_DETECTION:60000}
+      pool-name: TradeCapturePool
+      # Connection pool monitoring
+      register-mbeans: true
+      # SQL Server specific optimizations
+      data-source-properties:
+        cachePrepStmts: true
+        prepStmtCacheSize: 250
+        prepStmtCacheSqlLimit: 2048
+        useServerPrepStmts: true
+        rewriteBatchedStatements: true
   
   jpa:
     hibernate:
@@ -48,9 +64,9 @@ spring:
       timeout: 2000ms
       lettuce:
         pool:
-          max-active: 8
-          max-idle: 8
-          min-idle: 0
+          max-active: ${REDIS_MAX_ACTIVE:20}
+          max-idle: ${REDIS_MAX_IDLE:10}
+          min-idle: ${REDIS_MIN_IDLE:5}
 
 # Server configuration
 server:
@@ -61,11 +77,98 @@ server:
 idempotency:
   enabled: true
   window-hours: 24
-  cache-ttl-hours: 1
+  cache-ttl-hours: ${IDEMPOTENCY_CACHE_TTL_HOURS:12}
   storage-type: redis+database
   key-strategy: tradeId
   allow-payload-differences: false
   retry-on-failure: true
+  # Redis cache configuration for idempotency checks
+  redis:
+    enabled: ${IDEMPOTENCY_REDIS_CACHE:true}
+    key-prefix: "idempotency:"
+    ttl-seconds: ${IDEMPOTENCY_REDIS_TTL:43200}
+
+# Deadlock retry configuration
+deadlock-retry:
+  enabled: ${DEADLOCK_RETRY_ENABLED:true}
+  max-attempts: ${DEADLOCK_RETRY_MAX_ATTEMPTS:3}
+  initial-delay-ms: ${DEADLOCK_RETRY_INITIAL_DELAY:50}
+  max-delay-ms: ${DEADLOCK_RETRY_MAX_DELAY:500}
+  multiplier: ${DEADLOCK_RETRY_MULTIPLIER:2.0}
+
+# Rate limiting configuration (Priority 5.1)
+rate-limit:
+  enabled: ${RATE_LIMIT_ENABLED:true}
+  global:
+    enabled: ${RATE_LIMIT_GLOBAL_ENABLED:true}
+    requests-per-second: ${RATE_LIMIT_GLOBAL_RPS:100}  # Global rate limit: 100 requests/sec
+    burst-size: ${RATE_LIMIT_GLOBAL_BURST:200}  # Allow burst up to 200 requests
+  per-partition:
+    enabled: ${RATE_LIMIT_PER_PARTITION_ENABLED:true}
+    requests-per-second: ${RATE_LIMIT_PER_PARTITION_RPS:10}  # Per-partition: 10 requests/sec
+    burst-size: ${RATE_LIMIT_PER_PARTITION_BURST:20}  # Allow burst up to 20 requests per partition
+
+# Bulkhead pattern configuration (Priority 5.2)
+bulkhead:
+  enabled: ${BULKHEAD_ENABLED:true}
+  partition-groups: ${BULKHEAD_PARTITION_GROUPS:10}  # Number of partition groups (each gets its own thread pool)
+  partition-group:
+    core-size: ${BULKHEAD_PARTITION_GROUP_CORE_SIZE:5}
+    max-size: ${BULKHEAD_PARTITION_GROUP_MAX_SIZE:10}
+    queue-capacity: ${BULKHEAD_PARTITION_GROUP_QUEUE:100}
+  external-services:
+    core-size: ${BULKHEAD_EXTERNAL_SERVICES_CORE:10}
+    max-size: ${BULKHEAD_EXTERNAL_SERVICES_MAX:20}
+    queue-capacity: ${BULKHEAD_EXTERNAL_SERVICES_QUEUE:200}
+
+# Adaptive retry policies configuration (Priority 5.3)
+adaptive-retry:
+  enabled: ${ADAPTIVE_RETRY_ENABLED:true}
+  network:
+    max-attempts: ${ADAPTIVE_RETRY_NETWORK_MAX:5}
+    initial-delay-ms: ${ADAPTIVE_RETRY_NETWORK_INITIAL:100}
+    max-delay-ms: ${ADAPTIVE_RETRY_NETWORK_MAX_DELAY:2000}
+  server-error:
+    max-attempts: ${ADAPTIVE_RETRY_SERVER_ERROR_MAX:3}
+    initial-delay-ms: ${ADAPTIVE_RETRY_SERVER_ERROR_INITIAL:500}
+    max-delay-ms: ${ADAPTIVE_RETRY_SERVER_ERROR_MAX_DELAY:5000}
+  rate-limit:
+    max-attempts: ${ADAPTIVE_RETRY_RATE_LIMIT_MAX:5}
+    initial-delay-ms: ${ADAPTIVE_RETRY_RATE_LIMIT_INITIAL:1000}
+    max-delay-ms: ${ADAPTIVE_RETRY_RATE_LIMIT_MAX_DELAY:10000}
+
+# Sequence number validation and out-of-order message handling (Priority 4)
+sequence:
+  validation:
+    enabled: ${SEQUENCE_VALIDATION_ENABLED:true}  # Enable/disable sequence number validation
+  buffer:
+    enabled: ${SEQUENCE_BUFFER_ENABLED:true}
+    window-size: ${SEQUENCE_BUFFER_WINDOW_SIZE:1000}  # Maximum messages to buffer per partition
+    timeout-seconds: ${SEQUENCE_BUFFER_TIMEOUT:300}  # 5 minutes timeout for waiting for missing sequences
+    # Time-based sliding window: only buffer trades within this window (e.g., last 7 days)
+    # Trades outside this window are processed immediately (too old to wait for)
+    time-window-days: ${SEQUENCE_TIME_WINDOW_DAYS:7}  # Buffer trades within last 7 days
+
+# Cache configuration for Priority 3.2 - Query Result Caching
+cache:
+  partition-state:
+    enabled: ${CACHE_PARTITION_STATE_ENABLED:true}
+    key-prefix: ${CACHE_PARTITION_STATE_PREFIX:partition-state:}
+    ttl-seconds: ${CACHE_PARTITION_STATE_TTL:3600}  # 1 hour
+  
+  reference-data:
+    enabled: ${CACHE_REFERENCE_DATA_ENABLED:true}
+    security:
+      key-prefix: ${CACHE_REFERENCE_DATA_SECURITY_PREFIX:ref:security:}
+      ttl-seconds: ${CACHE_REFERENCE_DATA_SECURITY_TTL:7200}  # 2 hours
+    account:
+      key-prefix: ${CACHE_REFERENCE_DATA_ACCOUNT_PREFIX:ref:account:}
+      ttl-seconds: ${CACHE_REFERENCE_DATA_ACCOUNT_TTL:7200}  # 2 hours
+  
+  rules:
+    enabled: ${CACHE_RULES_ENABLED:true}
+    key-prefix: ${CACHE_RULES_PREFIX:rules:}
+    ttl-seconds: ${CACHE_RULES_TTL:3600}  # 1 hour
 
 # Service endpoints
 services:
@@ -110,6 +213,8 @@ messaging:
     vpn: ${SOLACE_VPN:default}
     username: ${SOLACE_USERNAME:default}
     password: ${SOLACE_PASSWORD:default}
+    connection-pool-size: ${SOLACE_CONNECTION_POOL_SIZE:5}
+    consumer-threads: ${SOLACE_CONSUMER_THREADS:3}
     queues:
       input: trade/capture/input
       output: trade/capture/blotter
@@ -127,6 +232,9 @@ messaging:
       auto-offset-reset: ${KAFKA_AUTO_OFFSET_RESET:earliest}
       enable-auto-commit: ${KAFKA_ENABLE_AUTO_COMMIT:false}
       max-poll-records: ${KAFKA_MAX_POLL_RECORDS:10}
+      partition-assignment-strategy: ${KAFKA_PARTITION_ASSIGNMENT_STRATEGY:org.apache.kafka.clients.consumer.RangeAssignor}
+      concurrency: ${KAFKA_CONSUMER_CONCURRENCY:3}
+    publish-format: ${KAFKA_PUBLISH_FORMAT:protobuf}  # protobuf or json
   
   rabbitmq:
     enabled: ${RABBITMQ_ENABLED:false}
@@ -168,6 +276,39 @@ publishing:
     #   url: http://localhost:8085/webhook
     #   enabled: true
 
+# Actuator configuration for metrics and health
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+      environment: ${SPRING_PROFILES_ACTIVE:dev}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+        trades.processing.time: 0.5, 0.95, 0.99
+        enrichment.time: 0.5, 0.95, 0.99
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0  # 100% sampling for now, can be reduced in production
+    baggage:
+      enabled: true
+    propagation:
+      type: W3C  # W3C Trace Context propagation
+
 # Logging
 logging:
   level:
@@ -175,4 +316,7 @@ logging:
     com.pb.synth.tradecapture: DEBUG
     org.springframework: WARN
     org.hibernate: WARN
+    io.opentelemetry: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] [%X{tradeId}] [%X{partitionKey}] %logger{36} - %msg%n"
 

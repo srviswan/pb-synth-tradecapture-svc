@@ -5,12 +5,15 @@ import com.pb.synth.tradecapture.model.Criterion;
 import com.pb.synth.tradecapture.model.Rule;
 import com.pb.synth.tradecapture.model.SwapBlotter;
 import com.pb.synth.tradecapture.repository.RulesRepository;
+import com.pb.synth.tradecapture.service.cache.RulesCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Engine for evaluating and applying rules.
@@ -21,70 +24,135 @@ import java.util.Map;
 public class RulesEngine {
 
     private final RulesRepository rulesRepository;
+    private final RulesCacheService rulesCacheService;
 
     /**
      * Apply all rules (Economic, Non-Economic, Workflow) to SwapBlotter.
      */
     public SwapBlotter applyRules(SwapBlotter swapBlotter, Map<String, Object> tradeData) {
+        List<String> appliedRuleIds = new ArrayList<>();
+        
         // Apply economic rules first
-        swapBlotter = applyEconomicRules(swapBlotter, tradeData);
+        List<String> economicRules = applyEconomicRules(swapBlotter, tradeData);
+        appliedRuleIds.addAll(economicRules);
         
         // Apply non-economic rules second
-        swapBlotter = applyNonEconomicRules(swapBlotter, tradeData);
+        List<String> nonEconomicRules = applyNonEconomicRules(swapBlotter, tradeData);
+        appliedRuleIds.addAll(nonEconomicRules);
         
         // Apply workflow rules last
-        swapBlotter = applyWorkflowRules(swapBlotter, tradeData);
+        List<String> workflowRules = applyWorkflowRules(swapBlotter, tradeData);
+        appliedRuleIds.addAll(workflowRules);
+        
+        // Track applied rules in metadata
+        if (swapBlotter.getProcessingMetadata() != null) {
+            swapBlotter.getProcessingMetadata().setRulesApplied(appliedRuleIds);
+        }
         
         return swapBlotter;
     }
 
     /**
      * Apply economic rules.
+     * Uses Redis cache (L1) first, then in-memory repository (L2) as fallback.
      */
-    public SwapBlotter applyEconomicRules(SwapBlotter swapBlotter, Map<String, Object> tradeData) {
-        List<Rule> rules = rulesRepository.getEconomicRules();
+    public List<String> applyEconomicRules(SwapBlotter swapBlotter, Map<String, Object> tradeData) {
+        List<Rule> rules;
+        
+        // Try cache first (L1)
+        Optional<List<Rule>> cachedRules = rulesCacheService.getEconomicRules();
+        if (cachedRules.isPresent()) {
+            log.debug("Economic rules cache hit");
+            rules = cachedRules.get();
+        } else {
+            // Fallback to repository (L2)
+            rules = rulesRepository.getEconomicRules();
+            // Cache for future lookups
+            if (!rules.isEmpty()) {
+                rulesCacheService.putEconomicRules(rules);
+            }
+        }
+        
+        List<String> appliedRuleIds = new ArrayList<>();
         
         for (Rule rule : rules) {
             if (matchesCriteria(rule.getCriteria(), tradeData)) {
                 executeActions(rule.getActions(), swapBlotter, tradeData);
-                log.debug("Applied economic rule: {}", rule.getId());
+                appliedRuleIds.add(rule.getId());
+                log.info("Applied economic rule: {} - {}", rule.getId(), rule.getName());
             }
         }
         
-        return swapBlotter;
+        return appliedRuleIds;
     }
 
     /**
      * Apply non-economic rules.
+     * Uses Redis cache (L1) first, then in-memory repository (L2) as fallback.
      */
-    public SwapBlotter applyNonEconomicRules(SwapBlotter swapBlotter, Map<String, Object> tradeData) {
-        List<Rule> rules = rulesRepository.getNonEconomicRules();
+    public List<String> applyNonEconomicRules(SwapBlotter swapBlotter, Map<String, Object> tradeData) {
+        List<Rule> rules;
+        
+        // Try cache first (L1)
+        Optional<List<Rule>> cachedRules = rulesCacheService.getNonEconomicRules();
+        if (cachedRules.isPresent()) {
+            log.debug("Non-economic rules cache hit");
+            rules = cachedRules.get();
+        } else {
+            // Fallback to repository (L2)
+            rules = rulesRepository.getNonEconomicRules();
+            // Cache for future lookups
+            if (!rules.isEmpty()) {
+                rulesCacheService.putNonEconomicRules(rules);
+            }
+        }
+        
+        List<String> appliedRuleIds = new ArrayList<>();
         
         for (Rule rule : rules) {
             if (matchesCriteria(rule.getCriteria(), tradeData)) {
                 executeActions(rule.getActions(), swapBlotter, tradeData);
-                log.debug("Applied non-economic rule: {}", rule.getId());
+                appliedRuleIds.add(rule.getId());
+                log.info("Applied non-economic rule: {} - {}", rule.getId(), rule.getName());
             }
         }
         
-        return swapBlotter;
+        return appliedRuleIds;
     }
 
     /**
      * Apply workflow rules.
+     * Uses Redis cache (L1) first, then in-memory repository (L2) as fallback.
      */
-    public SwapBlotter applyWorkflowRules(SwapBlotter swapBlotter, Map<String, Object> tradeData) {
-        List<Rule> rules = rulesRepository.getWorkflowRules();
+    public List<String> applyWorkflowRules(SwapBlotter swapBlotter, Map<String, Object> tradeData) {
+        List<Rule> rules;
+        
+        // Try cache first (L1)
+        Optional<List<Rule>> cachedRules = rulesCacheService.getWorkflowRules();
+        if (cachedRules.isPresent()) {
+            log.debug("Workflow rules cache hit");
+            rules = cachedRules.get();
+        } else {
+            // Fallback to repository (L2)
+            rules = rulesRepository.getWorkflowRules();
+            // Cache for future lookups
+            if (!rules.isEmpty()) {
+                rulesCacheService.putWorkflowRules(rules);
+            }
+        }
+        
+        List<String> appliedRuleIds = new ArrayList<>();
         
         for (Rule rule : rules) {
             if (matchesCriteria(rule.getCriteria(), tradeData)) {
                 executeActions(rule.getActions(), swapBlotter, tradeData);
-                log.debug("Applied workflow rule: {}", rule.getId());
+                appliedRuleIds.add(rule.getId());
+                log.info("Applied workflow rule: {} - {}", rule.getId(), rule.getName());
                 break; // First matching rule determines workflow status
             }
         }
         
-        return swapBlotter;
+        return appliedRuleIds;
     }
 
     /**

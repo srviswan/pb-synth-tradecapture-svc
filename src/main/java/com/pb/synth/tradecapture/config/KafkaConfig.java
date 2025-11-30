@@ -54,6 +54,13 @@ public class KafkaConfig {
         props.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10000);
         props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 300000);
         
+        // Partition assignment strategy for better load distribution
+        // Default to RangeAssignor (can be overridden via properties)
+        props.put(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, 
+            java.util.Collections.singletonList(
+                org.apache.kafka.clients.consumer.RangeAssignor.class.getName()
+            ));
+        
         return new DefaultKafkaConsumerFactory<>(props);
     }
     
@@ -65,7 +72,12 @@ public class KafkaConfig {
         
         // Set concurrency for parallel partition processing
         // Each partition will be processed by a separate thread
+        // Concurrency should match or be less than the number of partitions
         factory.setConcurrency(3); // Process up to 3 partitions concurrently
+        
+        // Configure partition assignment for better load distribution
+        // Messages with same partition key will go to same partition
+        // Different partitions can be processed in parallel
         
         // Manual acknowledgment for better control
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);

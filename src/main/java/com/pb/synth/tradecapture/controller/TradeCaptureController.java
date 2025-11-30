@@ -6,9 +6,12 @@ import com.pb.synth.tradecapture.service.TradeCaptureService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 /**
  * REST controller for trade capture operations.
@@ -20,6 +23,8 @@ import org.springframework.web.bind.annotation.*;
 public class TradeCaptureController {
 
     private final TradeCaptureService tradeCaptureService;
+    private final com.pb.synth.tradecapture.service.SwapBlotterService swapBlotterService;
+    private final ApplicationContext applicationContext;
 
     /**
      * Capture and enrich a single trade (synchronous).
@@ -48,9 +53,10 @@ public class TradeCaptureController {
 
     /**
      * Capture trade asynchronously.
+     * Returns 202 Accepted immediately with job ID.
      */
     @PostMapping("/capture/async")
-    public ResponseEntity<TradeCaptureResponse> captureTradeAsync(
+    public ResponseEntity<Map<String, Object>> captureTradeAsync(
             @Valid @RequestBody TradeCaptureRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         
@@ -59,11 +65,64 @@ public class TradeCaptureController {
             request.setIdempotencyKey(idempotencyKey);
         }
         
-        log.info("Processing async trade capture request: {}", request.getTradeId());
-        // TODO: Implement async processing
-        TradeCaptureResponse response = tradeCaptureService.processTrade(request);
+        log.info("Submitting async trade capture request: {}", request.getTradeId());
         
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
+        // Submit for async processing
+        var asyncTradeProcessingService = 
+            applicationContext.getBean(com.pb.synth.tradecapture.service.AsyncTradeProcessingService.class);
+        String jobId = asyncTradeProcessingService.submitAsyncTrade(request);
+        
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+            .body(Map.of(
+                "jobId", jobId,
+                "status", "ACCEPTED",
+                "message", "Trade submitted for async processing",
+                "statusUrl", "/api/v1/trades/jobs/" + jobId + "/status"
+            ));
+    }
+    
+    /**
+     * Get async job status.
+     */
+    @GetMapping("/jobs/{jobId}/status")
+    public ResponseEntity<com.pb.synth.tradecapture.model.AsyncJobStatus> getJobStatus(
+            @PathVariable("jobId") String jobId) {
+        
+        try {
+            var asyncTradeProcessingService = 
+                applicationContext.getBean(com.pb.synth.tradecapture.service.AsyncTradeProcessingService.class);
+            com.pb.synth.tradecapture.model.AsyncJobStatus status = 
+                asyncTradeProcessingService.getJobStatus(jobId);
+            
+            return ResponseEntity.ok(status);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+    
+    /**
+     * Cancel an async job.
+     */
+    @DeleteMapping("/jobs/{jobId}")
+    public ResponseEntity<Map<String, Object>> cancelJob(@PathVariable("jobId") String jobId) {
+        var asyncTradeProcessingService = 
+            applicationContext.getBean(com.pb.synth.tradecapture.service.AsyncTradeProcessingService.class);
+        
+        boolean cancelled = asyncTradeProcessingService.cancelJob(jobId);
+        
+        if (cancelled) {
+            return ResponseEntity.ok(Map.of(
+                "jobId", jobId,
+                "status", "CANCELLED",
+                "message", "Job cancelled successfully"
+            ));
+        } else {
+            return ResponseEntity.badRequest().body(Map.of(
+                "jobId", jobId,
+                "status", "NOT_CANCELLABLE",
+                "message", "Job cannot be cancelled (may be completed, failed, or not found)"
+            ));
+        }
     }
 
     /**
@@ -71,10 +130,40 @@ public class TradeCaptureController {
      */
     @GetMapping("/capture/{tradeId}")
     public ResponseEntity<TradeCaptureResponse> getSwapBlotter(
-            @PathVariable String tradeId) {
+            @PathVariable("tradeId") String tradeId) {
         
-        // TODO: Implement retrieval
-        return ResponseEntity.notFound().build();
+        log.info("Retrieving SwapBlotter for trade ID: {}", tradeId);
+        
+        try {
+            var swapBlotterOpt = swapBlotterService.getSwapBlotterByTradeId(tradeId);
+            
+            if (swapBlotterOpt.isPresent()) {
+                var swapBlotter = swapBlotterOpt.get();
+                var response = TradeCaptureResponse.builder()
+                    .tradeId(tradeId)
+                    .status("SUCCESS")
+                    .swapBlotter(swapBlotter)
+                    .build();
+                
+                return ResponseEntity.ok(response);
+            } else {
+                log.warn("SwapBlotter not found for trade ID: {}", tradeId);
+                return ResponseEntity.notFound().build();
+            }
+        } catch (Exception e) {
+            log.error("Error retrieving SwapBlotter for trade ID: {}", tradeId, e);
+            var response = TradeCaptureResponse.builder()
+                .tradeId(tradeId)
+                .status("FAILED")
+                .error(com.pb.synth.tradecapture.model.ErrorDetail.builder()
+                    .code("RETRIEVAL_ERROR")
+                    .message("Failed to retrieve trade: " + e.getMessage())
+                    .timestamp(java.time.ZonedDateTime.now())
+                    .build())
+                .build();
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
     }
 }
 

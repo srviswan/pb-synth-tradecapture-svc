@@ -35,6 +35,7 @@ public class PartitionLockService {
     
     /**
      * Acquire a distributed lock for a partition with custom timeout.
+     * Uses exponential backoff to reduce contention.
      * 
      * @param partitionKey The partition key
      * @param lockTimeout How long the lock should be held
@@ -47,26 +48,43 @@ public class PartitionLockService {
         
         long startTime = System.currentTimeMillis();
         long waitMillis = waitTimeout.toMillis();
+        long backoffMs = 50; // Start with 50ms
+        long maxBackoffMs = 500; // Max 500ms between attempts
+        double multiplier = 1.5; // Exponential backoff multiplier
         
+        int attempt = 0;
         while (System.currentTimeMillis() - startTime < waitMillis) {
+            attempt++;
             Boolean acquired = redisTemplate.opsForValue()
                 .setIfAbsent(lockKey, lockValue, lockTimeout.toSeconds(), TimeUnit.SECONDS);
             
             if (Boolean.TRUE.equals(acquired)) {
-                log.debug("Acquired lock for partition: {}", partitionKey);
+                log.debug("Acquired lock for partition: {} after {} attempts", partitionKey, attempt);
                 return true;
             }
             
-            // Wait a bit before retrying
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return false;
+            // Exponential backoff - wait longer between retries
+            long remainingTime = waitMillis - (System.currentTimeMillis() - startTime);
+            long sleepTime = Math.min(backoffMs, remainingTime);
+            
+            if (sleepTime > 0) {
+                try {
+                    Thread.sleep(sleepTime);
+                    // Increase backoff for next attempt (exponential)
+                    backoffMs = Math.min((long) (backoffMs * multiplier), maxBackoffMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Interrupted while waiting for lock: {}", partitionKey);
+                    return false;
+                }
+            } else {
+                // No time remaining
+                break;
             }
         }
         
-        log.warn("Failed to acquire lock for partition: {} within timeout", partitionKey);
+        log.warn("Failed to acquire lock for partition: {} within timeout after {} attempts", 
+            partitionKey, attempt);
         return false;
     }
     

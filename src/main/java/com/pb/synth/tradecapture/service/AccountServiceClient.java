@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -29,6 +30,9 @@ public class AccountServiceClient {
     @Value("${services.account.timeout:5000}")
     private int timeout;
 
+    @Value("${services.account.mock:false}")
+    private boolean mockMode;
+
     /**
      * Lookup account and book with circuit breaker and retry.
      */
@@ -37,6 +41,26 @@ public class AccountServiceClient {
     @Retry(name = "accountService")
     @TimeLimiter(name = "accountService")
     public CompletableFuture<Optional<Map<String, Object>>> lookupAccountAsync(String accountId, String bookId) {
+        // Return mock data if mock mode is enabled
+        if (mockMode) {
+            log.info("Mock AccountService: Looking up account: {} / book: {}", accountId, bookId);
+            return CompletableFuture.supplyAsync(() -> {
+                Map<String, Object> mockAccount = new HashMap<>();
+                mockAccount.put("accountId", accountId);
+                mockAccount.put("bookId", bookId);
+                mockAccount.put("accountName", "Test Account " + accountId);
+                mockAccount.put("bookName", "Test Book " + bookId);
+                mockAccount.put("status", "ACTIVE");
+                mockAccount.put("currency", "USD");
+                mockAccount.put("region", "US");
+                mockAccount.put("legalEntity", "Test Entity");
+                mockAccount.put("desk", "Trading Desk 1");
+                mockAccount.put("trader", "Test Trader");
+                log.debug("Mock AccountService: Returning mock data for account: {} / book: {}", accountId, bookId);
+                return Optional.of(mockAccount);
+            });
+        }
+        
         return CompletableFuture.supplyAsync(() -> {
             try {
                 String url = baseUrl + "/api/v1/accounts/" + accountId + "/books/" + bookId;
@@ -58,18 +82,20 @@ public class AccountServiceClient {
             return lookupAccountAsync(accountId, bookId).get();
         } catch (Exception e) {
             log.error("Error in synchronous account lookup: {} / {}", accountId, bookId, e);
-            return lookupAccountFallback(accountId, bookId, e);
+            return lookupAccountFallback(accountId, bookId, e).join();
         }
     }
     
     /**
      * Fallback method when circuit breaker is open or service fails.
+     * Must return CompletableFuture for async methods.
+     * Must be public for Resilience4j to find it.
      */
     @SuppressWarnings("unused")
-    private Optional<Map<String, Object>> lookupAccountFallback(String accountId, String bookId, Exception e) {
-        log.warn("Using fallback for account lookup: {} / {}, error: {}", accountId, bookId, e.getMessage());
+    public CompletableFuture<Optional<Map<String, Object>>> lookupAccountFallback(String accountId, String bookId, Throwable e) {
+        log.warn("Using fallback for account lookup: {} / {}, error: {}", accountId, bookId, e != null ? e.getMessage() : "unknown");
         // Return empty optional - enrichment service will handle partial enrichment
-        return Optional.empty();
+        return CompletableFuture.completedFuture(Optional.empty());
     }
 }
 

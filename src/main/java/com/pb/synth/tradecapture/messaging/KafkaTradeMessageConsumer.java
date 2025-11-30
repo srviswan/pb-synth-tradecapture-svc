@@ -44,18 +44,22 @@ public class KafkaTradeMessageConsumer implements TradeMessageConsumer {
     @KafkaListener(
         topics = "${messaging.kafka.topics.input:trade-capture-input}",
         groupId = "${messaging.kafka.consumer.group-id:pb-synth-tradecapture-svc}",
-        containerFactory = "kafkaListenerContainerFactory"
+        containerFactory = "kafkaListenerContainerFactory",
+        properties = {
+            "partition.assignment.strategy=org.apache.kafka.clients.consumer.RangeAssignor"
+        }
     )
     public void consumeTradeMessage(
             @Payload byte[] messageBytes,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
+            @Header(KafkaHeaders.RECEIVED_KEY) String key,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
         
         try {
-            log.debug("Received trade message from Kafka: topic={}, partition={}, offset={}", 
-                topic, partition, offset);
+            log.debug("Received trade message from Kafka: topic={}, partition={}, key={}, offset={}", 
+                topic, partition, key, offset);
             
             // Deserialize protobuf message
             TradeCaptureProto.TradeCaptureMessage protoMessage = 
