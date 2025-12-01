@@ -7,8 +7,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import com.pb.synth.tradecapture.model.TradeSource;
+
 import java.time.LocalDate;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -57,11 +58,11 @@ class TradeCaptureRequestTest {
                 """;
 
             // When
-            var request = objectMapper.readValue(json, Map.class);
+            var request = objectMapper.readValue(json, TradeCaptureRequest.class);
 
             // Then
-            assertThat(request.get("tradeId")).isEqualTo("TRADE-2024-001");
-            assertThat(request.get("accountId")).isEqualTo("ACC-001");
+            assertThat(request.getTradeId()).isEqualTo("TRADE-2024-001");
+            assertThat(request.getAccountId()).isEqualTo("ACC-001");
         }
     }
 
@@ -98,9 +99,9 @@ class TradeCaptureRequestTest {
                 .build();
 
             // Then
-            assertThat(request.get("source")).isEqualTo("MANUAL");
-            assertThat(request.get("enteredBy")).isNotNull();
-            assertThat(request.get("entryTimestamp")).isNotNull();
+            assertThat(request.getSource()).isEqualTo(TradeSource.MANUAL);
+            assertThat(request.getEnteredBy()).isNotNull();
+            assertThat(request.getEntryTimestamp()).isNotNull();
         }
 
         @Test
@@ -112,7 +113,7 @@ class TradeCaptureRequestTest {
                 .build();
 
             // Then
-            assertThat(request.get("source")).isEqualTo("AUTOMATED");
+            assertThat(request.getSource()).isEqualTo(TradeSource.AUTOMATED);
             // Manual entry fields are optional for automated trades
         }
     }

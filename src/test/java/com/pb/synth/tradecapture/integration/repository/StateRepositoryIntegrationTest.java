@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MSSQLServerContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -26,8 +28,14 @@ class StateRepositoryIntegrationTest {
     @Container
     static MSSQLServerContainer<?> sqlServer = new MSSQLServerContainer<>(
             DockerImageName.parse("mcr.microsoft.com/mssql/server:2022-latest"))
-            .acceptLicense()
-            .withDatabaseName("testdb");
+            .acceptLicense();
+
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", sqlServer::getJdbcUrl);
+        registry.add("spring.datasource.username", sqlServer::getUsername);
+        registry.add("spring.datasource.password", sqlServer::getPassword);
+    }
 
     @Nested
     @DisplayName("Partition State CRUD Operations")

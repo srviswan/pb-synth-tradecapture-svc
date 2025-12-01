@@ -29,13 +29,27 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Component
 @ConditionalOnProperty(name = "messaging.solace.enabled", havingValue = "true", matchIfMissing = false)
-@RequiredArgsConstructor
 @Slf4j
 public class SolaceTradeMessageConsumer implements TradeMessageConsumer {
     
     private final TradeMessageProcessor messageProcessor;
     private final MessageConverter messageConverter;
     private final DLQPublisher dlqPublisher;
+    
+    public SolaceTradeMessageConsumer(TradeMessageProcessor messageProcessor, 
+                                     MessageConverter messageConverter,
+                                     org.springframework.context.ApplicationContext applicationContext) {
+        this.messageProcessor = messageProcessor;
+        this.messageConverter = messageConverter;
+        // DLQPublisher is optional - only available when Kafka is enabled
+        DLQPublisher publisher = null;
+        try {
+            publisher = applicationContext.getBean(DLQPublisher.class);
+        } catch (org.springframework.beans.factory.NoSuchBeanDefinitionException e) {
+            log.debug("DLQPublisher not available (Kafka disabled) - DLQ publishing will be skipped");
+        }
+        this.dlqPublisher = publisher;
+    }
     
     @Value("${messaging.solace.queues.input:trade/capture/input}")
     private String inputQueue;

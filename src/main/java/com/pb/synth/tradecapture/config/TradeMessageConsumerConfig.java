@@ -1,48 +1,39 @@
 package com.pb.synth.tradecapture.config;
 
-import com.pb.synth.tradecapture.messaging.TradeMessageConsumer;
+import com.pb.synth.tradecapture.messaging.MessagingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
-
 /**
- * Configuration component that starts the appropriate trade message consumer
- * based on configuration (Kafka for local, Solace for production).
+ * Configuration component that initializes the messaging service.
+ * The MessagingService handles provider selection and consumer lifecycle.
+ * 
+ * @deprecated This is now handled by MessagingService @PostConstruct.
+ * Kept for backward compatibility but delegates to MessagingService.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
+@Deprecated
 public class TradeMessageConsumerConfig implements CommandLineRunner {
     
-    private final ApplicationContext applicationContext;
+    private final MessagingService messagingService;
     
     @Override
     public void run(String... args) {
-        log.info("Starting trade message consumer based on configuration...");
-        
-        // Find all TradeMessageConsumer beans
-        Map<String, TradeMessageConsumer> consumers = 
-            applicationContext.getBeansOfType(TradeMessageConsumer.class);
-        
-        if (consumers.isEmpty()) {
-            log.warn("No trade message consumer found. Trade processing from queues will not be available.");
-            return;
+        log.info("Messaging service initialized via MessagingService");
+        // MessagingService handles initialization via @PostConstruct
+        // This CommandLineRunner is kept for backward compatibility
+        if (messagingService.isRunning()) {
+            log.info("Messaging service is running with provider: {}", 
+                messagingService.getActiveConsumer() != null 
+                    ? messagingService.getActiveConsumer().getClass().getSimpleName() 
+                    : "unknown");
+        } else {
+            log.warn("Messaging service is not running");
         }
-        
-        // Start all active consumers (only one should be active based on configuration)
-        consumers.forEach((beanName, consumer) -> {
-            log.info("Starting trade message consumer: {}", beanName);
-            try {
-                consumer.start();
-                log.info("Successfully started trade message consumer: {}", beanName);
-            } catch (Exception e) {
-                log.error("Failed to start trade message consumer: {}", beanName, e);
-            }
-        });
     }
 }
 

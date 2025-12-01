@@ -1,5 +1,14 @@
 package com.pb.synth.tradecapture.testutil;
 
+import com.pb.synth.tradecapture.model.Identifier;
+import com.pb.synth.tradecapture.model.Price;
+import com.pb.synth.tradecapture.model.PriceQuantity;
+import com.pb.synth.tradecapture.model.Quantity;
+import com.pb.synth.tradecapture.model.TradeCaptureRequest;
+import com.pb.synth.tradecapture.model.TradeLot;
+import com.pb.synth.tradecapture.model.TradeSource;
+import com.pb.synth.tradecapture.model.Unit;
+
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,7 +24,7 @@ public class TradeCaptureRequestBuilder {
     private String bookId;
     private String securityId;
     private String source;
-    private List<Object> tradeLots;
+    private List<TradeLot> tradeLots;
     private LocalDate tradeDate;
     private List<String> counterpartyIds;
     private Map<String, Object> metadata;
@@ -53,13 +62,8 @@ public class TradeCaptureRequestBuilder {
         return this;
     }
 
-    public TradeCaptureRequestBuilder withTradeLots(List<Object> tradeLots) {
+    public TradeCaptureRequestBuilder withTradeLots(List<TradeLot> tradeLots) {
         this.tradeLots = tradeLots;
-        return this;
-    }
-
-    public TradeCaptureRequestBuilder addTradeLot(Object tradeLot) {
-        this.tradeLots.add(tradeLot);
         return this;
     }
 
@@ -99,6 +103,9 @@ public class TradeCaptureRequestBuilder {
     }
 
     public TradeCaptureRequestBuilder withDefaultAutomatedTrade() {
+        // Create a default trade lot
+        TradeLot defaultLot = createDefaultTradeLot();
+        
         return this
             .withTradeId("TRADE-2024-001")
             .withAccountId("ACC-001")
@@ -106,11 +113,15 @@ public class TradeCaptureRequestBuilder {
             .withSecurityId("US0378331005")
             .withSource("AUTOMATED")
             .withTradeDate(LocalDate.now())
+            .addTradeLot(defaultLot)
             .addCounterpartyId("CPTY-001")
             .addCounterpartyId("CPTY-002");
     }
 
     public TradeCaptureRequestBuilder withDefaultManualTrade() {
+        // Create a default trade lot
+        TradeLot defaultLot = createDefaultTradeLot();
+        
         return this
             .withTradeId("TRADE-2024-002")
             .withAccountId("ACC-001")
@@ -118,26 +129,69 @@ public class TradeCaptureRequestBuilder {
             .withSecurityId("US0378331005")
             .withSource("MANUAL")
             .withTradeDate(LocalDate.now())
+            .addTradeLot(defaultLot)
             .addCounterpartyId("CPTY-001")
             .addCounterpartyId("CPTY-002")
             .withEnteredBy("USER-001")
             .withEntryTimestamp(LocalDate.now());
     }
 
-    public Map<String, Object> build() {
-        Map<String, Object> request = new HashMap<>();
-        if (tradeId != null) request.put("tradeId", tradeId);
-        if (accountId != null) request.put("accountId", accountId);
-        if (bookId != null) request.put("bookId", bookId);
-        if (securityId != null) request.put("securityId", securityId);
-        if (source != null) request.put("source", source);
-        if (!tradeLots.isEmpty()) request.put("tradeLots", tradeLots);
-        if (tradeDate != null) request.put("tradeDate", tradeDate.toString());
-        if (!counterpartyIds.isEmpty()) request.put("counterpartyIds", counterpartyIds);
-        if (!metadata.isEmpty()) request.put("metadata", metadata);
-        if (enteredBy != null) request.put("enteredBy", enteredBy);
-        if (entryTimestamp != null) request.put("entryTimestamp", entryTimestamp.toString());
-        return request;
+    public TradeCaptureRequestBuilder addTradeLot(TradeLot tradeLot) {
+        this.tradeLots.add(tradeLot);
+        return this;
+    }
+
+    public TradeCaptureRequest build() {
+        TradeSource tradeSource = source != null ? TradeSource.valueOf(source) : TradeSource.AUTOMATED;
+        List<TradeLot> lots = new ArrayList<>();
+        for (Object lot : tradeLots) {
+            if (lot instanceof TradeLot) {
+                lots.add((TradeLot) lot);
+            }
+        }
+        
+        return TradeCaptureRequest.builder()
+            .tradeId(tradeId)
+            .accountId(accountId)
+            .bookId(bookId)
+            .securityId(securityId)
+            .source(tradeSource)
+            .tradeLots(lots.isEmpty() ? List.of(createDefaultTradeLot()) : lots)
+            .tradeDate(tradeDate != null ? tradeDate : LocalDate.now())
+            .counterpartyIds(counterpartyIds.isEmpty() ? List.of("CPTY-001", "CPTY-002") : counterpartyIds)
+            .metadata(metadata)
+            .enteredBy(enteredBy)
+            .entryTimestamp(entryTimestamp)
+            .build();
+    }
+    
+    private TradeLot createDefaultTradeLot() {
+        // Create identifier
+        Identifier identifier = Identifier.builder()
+            .identifier("LOT-001")
+            .identifierType("INTERNAL")
+            .build();
+        
+        // Create price quantity with quantity and price
+        PriceQuantity priceQuantity = PriceQuantity.builder()
+            .quantity(List.of(
+                Quantity.builder()
+                    .value(1000.0)
+                    .unit(Unit.builder().financialUnit("SHARES").build())
+                    .build()
+            ))
+            .price(List.of(
+                Price.builder()
+                    .value(100.50)
+                    .unit(Unit.builder().currency("USD").build())
+                    .build()
+            ))
+            .build();
+        
+        return TradeLot.builder()
+            .lotIdentifier(List.of(identifier))
+            .priceQuantity(List.of(priceQuantity))
+            .build();
     }
 }
 

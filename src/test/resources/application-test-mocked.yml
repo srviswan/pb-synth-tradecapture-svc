@@ -1,33 +1,73 @@
 # All external services mocked
-# This profile extends test profile configuration
+spring:
+  application:
+    name: pb-synth-tradecapture-svc-test-mocked
+  flyway:
+    enabled: false
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+  data:
+    redis:
+      host: localhost
+      port: 6370
+      timeout: 2000ms
+
 services:
   security-master:
     mock: true
     url: http://localhost:${wiremock.port:8089}
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
   
   account:
     mock: true
     url: http://localhost:${wiremock.port:8089}
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
   
   rule-management:
     mock: true
     url: http://localhost:${wiremock.port:8089}
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
   
   approval-workflow:
     mock: true
     url: http://localhost:${wiremock.port:8089}
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
 
-# Use embedded Redis
-redis:
-  embedded: true
-  port: 6370
+# Kafka configuration (disabled for mocked tests)
+messaging:
+  kafka:
+    enabled: false
+  solace:
+    enabled: false
 
-# Use embedded database
-database:
-  embedded: true
-
-# Use embedded/mocked Solace
-solace:
-  embedded: true
-  mock: true
+# Logging
+logging:
+  level:
+    root: INFO
+    com.pb.synth.tradecapture: DEBUG
+    org.springframework: WARN
+    org.hibernate: WARN
 

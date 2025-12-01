@@ -13,8 +13,8 @@ spring:
     driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
     hikari:
       # Connection pool size - optimized for high concurrency and burst load
-      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:50}
-      minimum-idle: ${HIKARI_MIN_IDLE:20}
+      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:100}
+      minimum-idle: ${HIKARI_MIN_IDLE:30}
       connection-timeout: ${HIKARI_CONNECTION_TIMEOUT:30000}
       idle-timeout: ${HIKARI_IDLE_TIMEOUT:600000}
       max-lifetime: ${HIKARI_MAX_LIFETIME:1800000}
@@ -137,6 +137,25 @@ adaptive-retry:
     initial-delay-ms: ${ADAPTIVE_RETRY_RATE_LIMIT_INITIAL:1000}
     max-delay-ms: ${ADAPTIVE_RETRY_RATE_LIMIT_MAX_DELAY:10000}
 
+# Backpressure handling configuration
+backpressure:
+  api:
+    enabled: ${BACKPRESSURE_API_ENABLED:true}
+    max-queue-size: ${BACKPRESSURE_API_MAX_QUEUE:1000}  # Maximum requests in queue
+    warning-threshold: ${BACKPRESSURE_API_WARNING:0.8}  # Warn at 80% capacity
+    thread-pool:
+      core-size: ${BACKPRESSURE_API_CORE_SIZE:20}
+      max-size: ${BACKPRESSURE_API_MAX_SIZE:50}
+      queue-capacity: ${BACKPRESSURE_API_QUEUE:1000}
+    retry-after-seconds: ${BACKPRESSURE_API_RETRY_AFTER:5}  # Retry-After header value
+  messaging:
+    enabled: ${BACKPRESSURE_MESSAGING_ENABLED:true}
+    max-lag: ${BACKPRESSURE_MESSAGING_MAX_LAG:10000}  # Maximum acceptable consumer lag
+    warning-lag: ${BACKPRESSURE_MESSAGING_WARNING_LAG:5000}  # Warning threshold for lag
+    resume-lag: ${BACKPRESSURE_MESSAGING_RESUME_LAG:2000}  # Resume when lag drops below this
+    max-processing-queue: ${BACKPRESSURE_MESSAGING_MAX_QUEUE:500}  # Max messages in processing queue
+    lag-check-interval-ms: ${BACKPRESSURE_MESSAGING_CHECK_INTERVAL:5000}  # How often to check lag
+
 # Sequence number validation and out-of-order message handling (Priority 4)
 sequence:
   validation:
@@ -205,9 +224,31 @@ services:
       backoff-delay: 1000
 
 # Messaging configuration
+# Provider selection: 'kafka' or 'solace'
+# The selected provider will be used for consuming trade messages
 messaging:
+  provider: ${MESSAGING_PROVIDER:kafka}  # kafka or solace
+  
+  kafka:
+    enabled: ${KAFKA_ENABLED:true}  # Enabled by default
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    topics:
+      input: trade-capture-input
+      output: trade-capture-blotter
+      dlq: trade-capture-dlq
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:pb-synth-tradecapture-svc}
+      auto-offset-reset: ${KAFKA_AUTO_OFFSET_RESET:earliest}
+      enable-auto-commit: ${KAFKA_ENABLE_AUTO_COMMIT:false}
+      max-poll-records: ${KAFKA_MAX_POLL_RECORDS:10}
+      # StickyAssignor provides better partition affinity during rebalancing
+      # Ensures same partition key messages stay on same consumer instance
+      partition-assignment-strategy: ${KAFKA_PARTITION_ASSIGNMENT_STRATEGY:org.apache.kafka.clients.consumer.StickyAssignor}
+      concurrency: ${KAFKA_CONSUMER_CONCURRENCY:3}
+    publish-format: ${KAFKA_PUBLISH_FORMAT:protobuf}  # protobuf or json
+  
   solace:
-    enabled: ${SOLACE_ENABLED:true}
+    enabled: ${SOLACE_ENABLED:false}  # Disabled by default, enable when using Solace provider
     host: ${SOLACE_HOST:localhost}
     port: ${SOLACE_PORT:55555}
     vpn: ${SOLACE_VPN:default}
@@ -219,22 +260,6 @@ messaging:
       input: trade/capture/input
       output: trade/capture/blotter
       dlq: trade/capture/dlq
-  
-  kafka:
-    enabled: ${KAFKA_ENABLED:false}
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    topics:
-      input: trade-capture-input
-      output: trade-capture-blotter
-      dlq: trade-capture-dlq
-    consumer:
-      group-id: ${KAFKA_CONSUMER_GROUP_ID:pb-synth-tradecapture-svc}
-      auto-offset-reset: ${KAFKA_AUTO_OFFSET_RESET:earliest}
-      enable-auto-commit: ${KAFKA_ENABLE_AUTO_COMMIT:false}
-      max-poll-records: ${KAFKA_MAX_POLL_RECORDS:10}
-      partition-assignment-strategy: ${KAFKA_PARTITION_ASSIGNMENT_STRATEGY:org.apache.kafka.clients.consumer.RangeAssignor}
-      concurrency: ${KAFKA_CONSUMER_CONCURRENCY:3}
-    publish-format: ${KAFKA_PUBLISH_FORMAT:protobuf}  # protobuf or json
   
   rabbitmq:
     enabled: ${RABBITMQ_ENABLED:false}
@@ -319,4 +344,15 @@ logging:
     io.opentelemetry: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] [%X{tradeId}] [%X{partitionKey}] %logger{36} - %msg%n"
+
+# Job status configuration
+job-status:
+  redis:
+    key-prefix: ${JOB_STATUS_REDIS_PREFIX:job-status:}
+  retention-months: ${JOB_STATUS_RETENTION_MONTHS:3}  # 3 months retention
+
+# Webhook configuration
+webhook:
+  timeout-ms: ${WEBHOOK_TIMEOUT_MS:30000}  # 30 seconds
+  max-retries: ${WEBHOOK_MAX_RETRIES:3}
 

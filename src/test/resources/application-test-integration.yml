@@ -1,33 +1,77 @@
+# Testcontainers will provide MS SQL Server database and Redis dynamically via @DynamicPropertySource
+# Database and Redis URLs will be set by testcontainers in test classes
 spring:
-  profiles:
-    include: test
+  application:
+    name: pb-synth-tradecapture-svc-test-integration
+  datasource:
+    # These will be overridden by @DynamicPropertySource in test classes
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.SQLServerDialect
+        format_sql: true
+  data:
+    redis:
+      # These will be overridden by @DynamicPropertySource in test classes
+      host: localhost
+      port: 6379
+      timeout: 2000ms
 
-# Testcontainers will provide MS SQL Server database and Redis
-# Services will use WireMock for HTTP services
+# Service endpoints (mocked via WireMock)
 services:
   security-master:
     mock: true
     url: http://localhost:${wiremock.port:8089}
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
   
   account:
     mock: true
     url: http://localhost:${wiremock.port:8089}
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
   
   rule-management:
     mock: true
     url: http://localhost:${wiremock.port:8089}
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
   
   approval-workflow:
     mock: true
     url: http://localhost:${wiremock.port:8089}
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
 
-# Testcontainers configuration
-testcontainers:
-  enabled: true
-  database:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    reuse: true
-  redis:
-    image: redis:7-alpine
-    reuse: true
+# Kafka configuration (disabled for integration tests)
+messaging:
+  kafka:
+    enabled: false
+  solace:
+    enabled: false
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.pb.synth.tradecapture: DEBUG
+    org.springframework: WARN
+    org.hibernate: WARN
 

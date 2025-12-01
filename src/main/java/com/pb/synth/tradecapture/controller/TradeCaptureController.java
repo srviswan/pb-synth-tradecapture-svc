@@ -1,12 +1,14 @@
 package com.pb.synth.tradecapture.controller;
 
+import com.pb.synth.tradecapture.model.AsyncJobStatus;
 import com.pb.synth.tradecapture.model.TradeCaptureRequest;
 import com.pb.synth.tradecapture.model.TradeCaptureResponse;
-import com.pb.synth.tradecapture.service.TradeCaptureService;
+import com.pb.synth.tradecapture.service.JobStatusService;
+import com.pb.synth.tradecapture.service.SwapBlotterService;
+import com.pb.synth.tradecapture.service.TradePublishingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +17,7 @@ import java.util.Map;
 
 /**
  * REST controller for trade capture operations.
+ * All trade creation endpoints publish to message queue for async processing.
  */
 @RestController
 @RequestMapping("/api/v1/trades")
@@ -22,61 +25,41 @@ import java.util.Map;
 @Slf4j
 public class TradeCaptureController {
 
-    private final TradeCaptureService tradeCaptureService;
-    private final com.pb.synth.tradecapture.service.SwapBlotterService swapBlotterService;
-    private final ApplicationContext applicationContext;
+    private final TradePublishingService tradePublishingService;
+    private final JobStatusService jobStatusService;
+    private final SwapBlotterService swapBlotterService;
 
     /**
-     * Capture and enrich a single trade (synchronous).
+     * Capture and enrich a single trade (async via queue).
+     * Publishes to message queue and returns 202 Accepted with job ID.
+     * 
+     * @param request The trade capture request
+     * @param idempotencyKey Optional idempotency key header
+     * @param callbackUrl Required webhook callback URL for completion notification
+     * @return 202 Accepted with job ID
      */
     @PostMapping("/capture")
-    public ResponseEntity<TradeCaptureResponse> captureTrade(
+    public ResponseEntity<Map<String, Object>> captureTrade(
             @Valid @RequestBody TradeCaptureRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader(value = "X-Callback-Url", required = true) String callbackUrl) {
         
         // Use header idempotency key if provided
         if (idempotencyKey != null && request.getIdempotencyKey() == null) {
             request.setIdempotencyKey(idempotencyKey);
         }
         
-        log.info("Processing trade capture request: {}", request.getTradeId());
-        TradeCaptureResponse response = tradeCaptureService.processTrade(request);
+        log.info("Publishing trade capture request to queue: {}", request.getTradeId());
         
-        HttpStatus status = "SUCCESS".equals(response.getStatus()) 
-            ? HttpStatus.OK 
-            : "DUPLICATE".equals(response.getStatus())
-                ? HttpStatus.OK
-                : HttpStatus.INTERNAL_SERVER_ERROR;
-        
-        return ResponseEntity.status(status).body(response);
-    }
-
-    /**
-     * Capture trade asynchronously.
-     * Returns 202 Accepted immediately with job ID.
-     */
-    @PostMapping("/capture/async")
-    public ResponseEntity<Map<String, Object>> captureTradeAsync(
-            @Valid @RequestBody TradeCaptureRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
-        
-        // Use header idempotency key if provided
-        if (idempotencyKey != null && request.getIdempotencyKey() == null) {
-            request.setIdempotencyKey(idempotencyKey);
-        }
-        
-        log.info("Submitting async trade capture request: {}", request.getTradeId());
-        
-        // Submit for async processing
-        var asyncTradeProcessingService = 
-            applicationContext.getBean(com.pb.synth.tradecapture.service.AsyncTradeProcessingService.class);
-        String jobId = asyncTradeProcessingService.submitAsyncTrade(request);
+        // Create job and publish to queue
+        String jobId = jobStatusService.createJob(null, request.getTradeId(), "REST_API");
+        tradePublishingService.publishTrade(request, jobId, "REST_API", callbackUrl);
         
         return ResponseEntity.status(HttpStatus.ACCEPTED)
             .body(Map.of(
                 "jobId", jobId,
                 "status", "ACCEPTED",
-                "message", "Trade submitted for async processing",
+                "message", "Trade submitted for processing",
                 "statusUrl", "/api/v1/trades/jobs/" + jobId + "/status"
             ));
     }
@@ -85,15 +68,11 @@ public class TradeCaptureController {
      * Get async job status.
      */
     @GetMapping("/jobs/{jobId}/status")
-    public ResponseEntity<com.pb.synth.tradecapture.model.AsyncJobStatus> getJobStatus(
+    public ResponseEntity<AsyncJobStatus> getJobStatus(
             @PathVariable("jobId") String jobId) {
         
         try {
-            var asyncTradeProcessingService = 
-                applicationContext.getBean(com.pb.synth.tradecapture.service.AsyncTradeProcessingService.class);
-            com.pb.synth.tradecapture.model.AsyncJobStatus status = 
-                asyncTradeProcessingService.getJobStatus(jobId);
-            
+            AsyncJobStatus status = jobStatusService.getJobStatus(jobId);
             return ResponseEntity.ok(status);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.notFound().build();
@@ -101,27 +80,32 @@ public class TradeCaptureController {
     }
     
     /**
-     * Cancel an async job.
+     * Cancel an async job (if still pending).
+     * Note: Once a job is in the queue and being processed, it cannot be cancelled.
      */
     @DeleteMapping("/jobs/{jobId}")
     public ResponseEntity<Map<String, Object>> cancelJob(@PathVariable("jobId") String jobId) {
-        var asyncTradeProcessingService = 
-            applicationContext.getBean(com.pb.synth.tradecapture.service.AsyncTradeProcessingService.class);
-        
-        boolean cancelled = asyncTradeProcessingService.cancelJob(jobId);
-        
-        if (cancelled) {
-            return ResponseEntity.ok(Map.of(
-                "jobId", jobId,
-                "status", "CANCELLED",
-                "message", "Job cancelled successfully"
-            ));
-        } else {
-            return ResponseEntity.badRequest().body(Map.of(
-                "jobId", jobId,
-                "status", "NOT_CANCELLABLE",
-                "message", "Job cannot be cancelled (may be completed, failed, or not found)"
-            ));
+        try {
+            AsyncJobStatus jobStatus = jobStatusService.getJobStatus(jobId);
+            
+            if (jobStatus.getStatus() == AsyncJobStatus.JobStatus.PENDING) {
+                jobStatusService.updateJobStatus(jobId, AsyncJobStatus.JobStatus.CANCELLED, 
+                    0, "Job cancelled by user");
+                
+                return ResponseEntity.ok(Map.of(
+                    "jobId", jobId,
+                    "status", "CANCELLED",
+                    "message", "Job cancelled successfully"
+                ));
+            } else {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "jobId", jobId,
+                    "status", "NOT_CANCELLABLE",
+                    "message", "Job cannot be cancelled (status: " + jobStatus.getStatus() + ")"
+                ));
+            }
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
         }
     }
 

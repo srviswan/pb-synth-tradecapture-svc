@@ -27,9 +27,16 @@ public class OutOfOrderMessageBuffer {
     private final DLQPublisher dlqPublisher;
     private final ApplicationContext applicationContext;
     
-    public OutOfOrderMessageBuffer(DLQPublisher dlqPublisher, ApplicationContext applicationContext) {
-        this.dlqPublisher = dlqPublisher;
+    public OutOfOrderMessageBuffer(ApplicationContext applicationContext) {
         this.applicationContext = applicationContext;
+        // DLQPublisher is optional - only available when Kafka is enabled
+        DLQPublisher publisher = null;
+        try {
+            publisher = applicationContext.getBean(DLQPublisher.class);
+        } catch (org.springframework.beans.factory.NoSuchBeanDefinitionException e) {
+            log.debug("DLQPublisher not available (Kafka disabled) - DLQ publishing will be skipped");
+        }
+        this.dlqPublisher = publisher;
     }
     
     /**
@@ -155,9 +162,11 @@ public class OutOfOrderMessageBuffer {
                 // Gap too large - reject and send to DLQ
                 log.error("Sequence gap too large: partition={}, expected={}, received={}, gap={}, max={}", 
                     partitionKey, expected, sequenceNumber, gap, bufferWindowSize);
-                dlqPublisher.publishToDLQ(request, new RuntimeException(
-                    String.format("Sequence gap too large: expected %d, received %d, gap %d", 
-                        expected, sequenceNumber, gap)));
+                if (dlqPublisher != null) {
+                    dlqPublisher.publishToDLQ(request, new RuntimeException(
+                        String.format("Sequence gap too large: expected %d, received %d, gap %d", 
+                            expected, sequenceNumber, gap)));
+                }
                 return BufferResult.builder()
                     .shouldProcess(false)
                     .request(request)
@@ -252,7 +261,9 @@ public class OutOfOrderMessageBuffer {
                 } catch (Exception e) {
                     log.error("Error processing buffered message: partition={}, sequence={}", 
                         partitionKey, seq, e);
-                    dlqPublisher.publishToDLQ(buffered.request, e);
+                    if (dlqPublisher != null) {
+                        dlqPublisher.publishToDLQ(buffered.request, e);
+                    }
                 }
             }
         }
@@ -301,8 +312,10 @@ public class OutOfOrderMessageBuffer {
                 Map<Long, BufferedMessage> partitionBuffer = buffer.get(partitionKey);
                 if (partitionBuffer != null) {
                     partitionBuffer.values().forEach(buffered -> {
-                        dlqPublisher.publishToDLQ(buffered.request, new RuntimeException(
-                            "Message buffer timeout - missing sequence numbers"));
+                        if (dlqPublisher != null) {
+                            dlqPublisher.publishToDLQ(buffered.request, new RuntimeException(
+                                "Message buffer timeout - missing sequence numbers"));
+                        }
                     });
                     partitionBuffer.clear();
                 }

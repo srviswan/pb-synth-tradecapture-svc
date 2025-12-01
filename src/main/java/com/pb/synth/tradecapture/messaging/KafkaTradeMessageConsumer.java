@@ -4,14 +4,19 @@ import com.pb.synth.tradecapture.model.TradeCaptureRequest;
 import com.pb.synth.tradecapture.proto.TradeCaptureProto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
+
+import jakarta.annotation.PostConstruct;
 
 /**
  * Kafka consumer for real-time trade message processing.
@@ -29,6 +34,12 @@ public class KafkaTradeMessageConsumer implements TradeMessageConsumer {
     private final MessageConverter messageConverter;
     private final DLQPublisher dlqPublisher;
     
+    @Autowired(required = false)
+    private com.pb.synth.tradecapture.messaging.ConsumerLagMonitor consumerLagMonitor;
+    
+    @Autowired(required = false)
+    private KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry;
+    
     @Value("${messaging.kafka.topics.input:trade-capture-input}")
     private String inputTopic;
     
@@ -37,6 +48,27 @@ public class KafkaTradeMessageConsumer implements TradeMessageConsumer {
     
     private volatile boolean running = false;
     
+    @PostConstruct
+    public void init() {
+        // Wire up consumer lag monitor to listener container
+        if (consumerLagMonitor != null && kafkaListenerEndpointRegistry != null) {
+            String listenerId = kafkaListenerEndpointRegistry.getListenerContainers().stream()
+                .filter(container -> container.getListenerId() != null && 
+                        container.getListenerId().contains("trade-capture-input"))
+                .findFirst()
+                .map(MessageListenerContainer::getListenerId)
+                .orElse(null);
+            
+            if (listenerId != null) {
+                MessageListenerContainer container = kafkaListenerEndpointRegistry.getListenerContainer(listenerId);
+                if (container != null) {
+                    consumerLagMonitor.setListenerContainer(container);
+                    log.info("Wired ConsumerLagMonitor to listener container: {}", listenerId);
+                }
+            }
+        }
+    }
+    
     /**
      * Kafka listener for trade capture messages.
      * Messages are deserialized from protobuf format and processed.
@@ -44,10 +76,7 @@ public class KafkaTradeMessageConsumer implements TradeMessageConsumer {
     @KafkaListener(
         topics = "${messaging.kafka.topics.input:trade-capture-input}",
         groupId = "${messaging.kafka.consumer.group-id:pb-synth-tradecapture-svc}",
-        containerFactory = "kafkaListenerContainerFactory",
-        properties = {
-            "partition.assignment.strategy=org.apache.kafka.clients.consumer.RangeAssignor"
-        }
+        containerFactory = "kafkaListenerContainerFactory"
     )
     public void consumeTradeMessage(
             @Payload byte[] messageBytes,
@@ -68,11 +97,16 @@ public class KafkaTradeMessageConsumer implements TradeMessageConsumer {
             log.info("Processing trade message from Kafka: tradeId={}, partitionKey={}", 
                 protoMessage.getTradeId(), protoMessage.getPartitionKey());
             
-            // Convert to TradeCaptureRequest
+            // Convert to TradeCaptureRequest (includes job metadata extraction)
             TradeCaptureRequest request = messageConverter.toTradeCaptureRequest(protoMessage);
             
-            // Process the trade
-            messageProcessor.processMessage(request);
+            // Extract metadata for job tracking and webhooks
+            // Job metadata is already included in the TradeCaptureRequest via MessageConverter
+            // We pass the metadata map for additional context
+            java.util.Map<String, String> metadata = new java.util.HashMap<>(protoMessage.getMetadataMap());
+            
+            // Process the trade with metadata
+            messageProcessor.processMessage(request, metadata);
             
             // Acknowledge message after successful processing
             if (acknowledgment != null) {

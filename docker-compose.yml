@@ -21,6 +21,7 @@ services:
       - SECURITY_MASTER_MOCK=true
       - ACCOUNT_SERVICE_MOCK=true
       - APPROVAL_WORKFLOW_MOCK=true
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
     depends_on:
       sqlserver:
         condition: service_healthy

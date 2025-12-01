@@ -7,13 +7,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import com.pb.synth.tradecapture.model.TradeCaptureRequest;
+
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
-
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -49,7 +49,8 @@ class TradeCaptureE2ETest {
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+            headers.set("X-Callback-Url", "http://example.com/callback");
+            HttpEntity<TradeCaptureRequest> entity = new HttpEntity<>(request, headers);
 
             // When
             // var response = restTemplate.postForEntity(
@@ -79,7 +80,8 @@ class TradeCaptureE2ETest {
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+            headers.set("X-Callback-Url", "http://example.com/callback");
+            HttpEntity<TradeCaptureRequest> entity = new HttpEntity<>(request, headers);
 
             // When
             // var response = restTemplate.postForEntity(
@@ -126,7 +128,9 @@ class TradeCaptureE2ETest {
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+            headers.set("X-Callback-Url", "http://example.com/callback");
+            @SuppressWarnings("unchecked")
+            HttpEntity<java.util.Map<String, Object>> entity = new HttpEntity<>(request, headers);
 
             // When
             // var response = restTemplate.postForEntity(
@@ -155,7 +159,8 @@ class TradeCaptureE2ETest {
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+            headers.set("X-Callback-Url", "http://example.com/callback");
+            HttpEntity<TradeCaptureRequest> entity = new HttpEntity<>(request, headers);
 
             // When
             // var response = restTemplate.postForEntity(

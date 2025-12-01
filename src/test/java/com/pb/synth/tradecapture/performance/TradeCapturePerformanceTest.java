@@ -1,5 +1,12 @@
 package com.pb.synth.tradecapture.performance;
 
+import com.pb.synth.tradecapture.model.Identifier;
+import com.pb.synth.tradecapture.model.Price;
+import com.pb.synth.tradecapture.model.PriceQuantity;
+import com.pb.synth.tradecapture.model.Quantity;
+import com.pb.synth.tradecapture.model.TradeCaptureRequest;
+import com.pb.synth.tradecapture.model.TradeLot;
+import com.pb.synth.tradecapture.model.Unit;
 import com.pb.synth.tradecapture.testutil.TradeCaptureRequestBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,7 +47,7 @@ class TradeCapturePerformanceTest {
     /**
      * Create a test trade request with unique trade ID.
      */
-    private Map<String, Object> createTestTrade(String tradeId, String accountId, String bookId) {
+    private TradeCaptureRequest createTestTrade(String tradeId, String accountId, String bookId) {
         return new TradeCaptureRequestBuilder()
             .withTradeId(tradeId)
             .withAccountId(accountId)
@@ -56,55 +63,44 @@ class TradeCapturePerformanceTest {
             .build();
     }
 
-    private Map<String, Object> createTradeLot() {
-        Map<String, Object> lot = new HashMap<>();
+    private TradeLot createTradeLot() {
+        // Create identifier
+        Identifier identifier = Identifier.builder()
+            .identifier("LOT-001")
+            .identifierType("INTERNAL")
+            .build();
         
-        // Lot identifier
-        List<Map<String, Object>> identifiers = new ArrayList<>();
-        Map<String, Object> identifier = new HashMap<>();
-        identifier.put("identifier", "LOT-001");
-        identifier.put("identifierType", "INTERNAL");
-        identifiers.add(identifier);
-        lot.put("lotIdentifier", identifiers);
+        // Create price quantity with quantity and price
+        PriceQuantity priceQuantity = PriceQuantity.builder()
+            .quantity(List.of(
+                Quantity.builder()
+                    .value(10000.0)
+                    .unit(Unit.builder().financialUnit("Shares").build())
+                    .build()
+            ))
+            .price(List.of(
+                Price.builder()
+                    .value(150.25)
+                    .unit(Unit.builder().currency("USD").build())
+                    .build()
+            ))
+            .build();
         
-        // Price quantity
-        List<Map<String, Object>> priceQuantities = new ArrayList<>();
-        Map<String, Object> priceQuantity = new HashMap<>();
-        
-        // Quantity
-        List<Map<String, Object>> quantities = new ArrayList<>();
-        Map<String, Object> quantity = new HashMap<>();
-        quantity.put("value", 10000);
-        Map<String, Object> quantityUnit = new HashMap<>();
-        quantityUnit.put("financialUnit", "Shares");
-        quantity.put("unit", quantityUnit);
-        quantities.add(quantity);
-        priceQuantity.put("quantity", quantities);
-        
-        // Price
-        List<Map<String, Object>> prices = new ArrayList<>();
-        Map<String, Object> price = new HashMap<>();
-        price.put("value", 150.25);
-        Map<String, Object> priceUnit = new HashMap<>();
-        priceUnit.put("currency", "USD");
-        price.put("unit", priceUnit);
-        prices.add(price);
-        priceQuantity.put("price", prices);
-        
-        priceQuantities.add(priceQuantity);
-        lot.put("priceQuantity", priceQuantities);
-        
-        return lot;
+        return TradeLot.builder()
+            .lotIdentifier(List.of(identifier))
+            .priceQuantity(List.of(priceQuantity))
+            .build();
     }
 
     /**
      * Process a single trade and return latency in milliseconds.
      */
-    private long processTrade(Map<String, Object> request) {
+    private long processTrade(TradeCaptureRequest request) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Idempotency-Key", UUID.randomUUID().toString());
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+        headers.set("X-Callback-Url", "http://example.com/callback");
+        HttpEntity<TradeCaptureRequest> entity = new HttpEntity<>(request, headers);
 
         long startTime = System.currentTimeMillis();
         try {
@@ -148,7 +144,7 @@ class TradeCapturePerformanceTest {
 
         for (int i = 0; i < totalTrades; i++) {
             String tradeId = "PERF-TRADE-" + System.currentTimeMillis() + "-" + i;
-            Map<String, Object> request = createTestTrade(tradeId, "ACC-001", "BOOK-001");
+            TradeCaptureRequest request = createTestTrade(tradeId, "ACC-001", "BOOK-001");
             
             long latency = processTrade(request);
             if (latency >= 0) {
@@ -216,7 +212,7 @@ class TradeCapturePerformanceTest {
 
         for (int i = 0; i < totalTrades; i++) {
             String tradeId = "PEAK-TRADE-" + System.currentTimeMillis() + "-" + i;
-            Map<String, Object> request = createTestTrade(tradeId, "ACC-002", "BOOK-002");
+            TradeCaptureRequest request = createTestTrade(tradeId, "ACC-002", "BOOK-002");
             
             long latency = processTrade(request);
             if (latency >= 0) {
@@ -273,7 +269,7 @@ class TradeCapturePerformanceTest {
         for (int i = 0; i < totalTrades; i++) {
             final int index = i;
             String tradeId = "BURST-TRADE-" + System.currentTimeMillis() + "-" + index;
-            Map<String, Object> request = createTestTrade(tradeId, "ACC-003", "BOOK-003");
+            TradeCaptureRequest request = createTestTrade(tradeId, "ACC-003", "BOOK-003");
             
             CompletableFuture<Long> future = CompletableFuture.supplyAsync(() -> {
                 return processTrade(request);
@@ -335,7 +331,7 @@ class TradeCapturePerformanceTest {
 
         for (int i = 0; i < numTrades; i++) {
             String tradeId = "LATENCY-TRADE-" + System.currentTimeMillis() + "-" + i;
-            Map<String, Object> request = createTestTrade(tradeId, "ACC-004", "BOOK-004");
+            TradeCaptureRequest request = createTestTrade(tradeId, "ACC-004", "BOOK-004");
             
             long latency = processTrade(request);
             if (latency >= 0) {
@@ -393,7 +389,7 @@ class TradeCapturePerformanceTest {
                 int successCount = 0;
                 for (int j = 0; j < tradesPerPartition; j++) {
                     String tradeId = "PARALLEL-TRADE-P" + partitionIndex + "-" + j + "-" + System.currentTimeMillis();
-                    Map<String, Object> request = createTestTrade(tradeId, accountId, bookId);
+                    TradeCaptureRequest request = createTestTrade(tradeId, accountId, bookId);
                     long latency = processTrade(request);
                     if (latency >= 0) {
                         successCount++;

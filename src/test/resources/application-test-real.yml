@@ -1,6 +1,6 @@
 spring:
-  profiles:
-    include: test
+  application:
+    name: pb-synth-tradecapture-svc-test-real
 
 # Real services configuration for E2E testing
 # These should point to test environment services

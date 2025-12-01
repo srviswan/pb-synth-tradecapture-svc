@@ -78,14 +78,15 @@ process_trade() {
     local response=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/trades/capture" \
         -H "Content-Type: application/json" \
         -H "Idempotency-Key: $idempotency_key" \
+        -H "X-Callback-Url: http://localhost:8080/callback" \
         -d "$(create_trade_request "$trade_id" "$account_id" "$book_id")" 2>&1)
     
     local end_time=$(date +%s%N)
     local http_code=$(echo "$response" | tail -n1)
     local latency_ms=$(( (end_time - start_time) / 1000000 ))
     
-    # Check for success (200, 201) or duplicate (which is also acceptable for performance testing)
-    if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 201 ]; then
+    # Check for success (202 Accepted for async, 200/201 for sync, 409 for duplicate)
+    if [ "$http_code" -eq 202 ] || [ "$http_code" -eq 200 ] || [ "$http_code" -eq 201 ]; then
         echo "$latency_ms"
         return 0
     elif [ "$http_code" -eq 409 ]; then
@@ -94,7 +95,7 @@ process_trade() {
         return 0
     else
         # Log error for debugging
-        if [ "$http_code" != "200" ] && [ "$http_code" != "201" ] && [ "$http_code" != "409" ]; then
+        if [ "$http_code" != "202" ] && [ "$http_code" != "200" ] && [ "$http_code" != "201" ] && [ "$http_code" != "409" ]; then
             echo "Error: HTTP $http_code for trade $trade_id" >&2
         fi
         echo "-1"

@@ -38,6 +38,12 @@ public class KafkaConfig {
     @Value("${messaging.kafka.consumer.max-poll-records:10}")
     private int maxPollRecords;
     
+    @Value("${messaging.kafka.consumer.partition-assignment-strategy:org.apache.kafka.clients.consumer.StickyAssignor}")
+    private String partitionAssignmentStrategy;
+    
+    @Value("${messaging.kafka.consumer.concurrency:3}")
+    private int concurrency;
+    
     @Bean
     public ConsumerFactory<String, byte[]> consumerFactory() {
         Map<String, Object> props = new HashMap<>();
@@ -54,12 +60,17 @@ public class KafkaConfig {
         props.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10000);
         props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 300000);
         
-        // Partition assignment strategy for better load distribution
-        // Default to RangeAssignor (can be overridden via properties)
+        // Backpressure settings - reduce fetch size when under pressure
+        // Smaller fetch size means less memory usage and faster processing
+        props.put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, 1); // Minimum bytes to fetch
+        props.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, 500); // Max wait time for fetch
+        props.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 1048576); // 1MB per partition
+        
+        // Partition assignment strategy for partition affinity
+        // StickyAssignor provides better partition affinity during rebalancing
+        // This ensures same partition key messages stay on same consumer instance
         props.put(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, 
-            java.util.Collections.singletonList(
-                org.apache.kafka.clients.consumer.RangeAssignor.class.getName()
-            ));
+            java.util.Collections.singletonList(partitionAssignmentStrategy));
         
         return new DefaultKafkaConsumerFactory<>(props);
     }
@@ -73,7 +84,8 @@ public class KafkaConfig {
         // Set concurrency for parallel partition processing
         // Each partition will be processed by a separate thread
         // Concurrency should match or be less than the number of partitions
-        factory.setConcurrency(3); // Process up to 3 partitions concurrently
+        // For horizontal scaling, each instance should process multiple partitions
+        factory.setConcurrency(concurrency);
         
         // Configure partition assignment for better load distribution
         // Messages with same partition key will go to same partition

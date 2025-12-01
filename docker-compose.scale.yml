@@ -27,13 +27,18 @@ services:
     container_name: pb-synth-tradecapture-svc-1
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+      - REGION=${REGION:-us}
+      - REGION_TIMEZONE=${REGION_TIMEZONE:-America/New_York}
       - DATABASE_URL=${DATABASE_URL:-jdbc:sqlserver://sqlserver:1433;databaseName=tradecapture;encrypt=true;trustServerCertificate=true}
       - DATABASE_USERNAME=${DATABASE_USERNAME:-sa}
       - DATABASE_PASSWORD=${DATABASE_PASSWORD:-YourStrong@Passw0rd}
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - KAFKA_ENABLED=true
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      - KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID:-pb-synth-tradecapture-svc-${REGION:-us}}
+      - KAFKA_PARTITION_ASSIGNMENT_STRATEGY=${KAFKA_PARTITION_ASSIGNMENT_STRATEGY:-org.apache.kafka.clients.consumer.StickyAssignor}
+      - KAFKA_CONSUMER_CONCURRENCY=${KAFKA_CONSUMER_CONCURRENCY:-3}
       - SOLACE_ENABLED=false
       - SECURITY_MASTER_MOCK=true
       - ACCOUNT_SERVICE_MOCK=true
@@ -65,13 +70,18 @@ services:
     container_name: pb-synth-tradecapture-svc-2
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+      - REGION=${REGION:-us}
+      - REGION_TIMEZONE=${REGION_TIMEZONE:-America/New_York}
       - DATABASE_URL=${DATABASE_URL:-jdbc:sqlserver://sqlserver:1433;databaseName=tradecapture;encrypt=true;trustServerCertificate=true}
       - DATABASE_USERNAME=${DATABASE_USERNAME:-sa}
       - DATABASE_PASSWORD=${DATABASE_PASSWORD:-YourStrong@Passw0rd}
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - KAFKA_ENABLED=true
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      - KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID:-pb-synth-tradecapture-svc-${REGION:-us}}
+      - KAFKA_PARTITION_ASSIGNMENT_STRATEGY=${KAFKA_PARTITION_ASSIGNMENT_STRATEGY:-org.apache.kafka.clients.consumer.StickyAssignor}
+      - KAFKA_CONSUMER_CONCURRENCY=${KAFKA_CONSUMER_CONCURRENCY:-3}
       - SOLACE_ENABLED=false
       - SECURITY_MASTER_MOCK=true
       - ACCOUNT_SERVICE_MOCK=true
@@ -103,13 +113,18 @@ services:
     container_name: pb-synth-tradecapture-svc-3
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+      - REGION=${REGION:-us}
+      - REGION_TIMEZONE=${REGION_TIMEZONE:-America/New_York}
       - DATABASE_URL=${DATABASE_URL:-jdbc:sqlserver://sqlserver:1433;databaseName=tradecapture;encrypt=true;trustServerCertificate=true}
       - DATABASE_USERNAME=${DATABASE_USERNAME:-sa}
       - DATABASE_PASSWORD=${DATABASE_PASSWORD:-YourStrong@Passw0rd}
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - KAFKA_ENABLED=true
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      - KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID:-pb-synth-tradecapture-svc-${REGION:-us}}
+      - KAFKA_PARTITION_ASSIGNMENT_STRATEGY=${KAFKA_PARTITION_ASSIGNMENT_STRATEGY:-org.apache.kafka.clients.consumer.StickyAssignor}
+      - KAFKA_CONSUMER_CONCURRENCY=${KAFKA_CONSUMER_CONCURRENCY:-3}
       - SOLACE_ENABLED=false
       - SECURITY_MASTER_MOCK=true
       - ACCOUNT_SERVICE_MOCK=true
