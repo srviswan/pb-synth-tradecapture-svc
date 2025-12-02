@@ -43,6 +43,7 @@ FAILED=0
 for i in {1..25}; do
     RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/v1/trades/capture" \
         -H "Content-Type: application/json" \
+        -H "X-Callback-Url: http://example.com/callback" \
         -d "{
             \"tradeId\": \"TEST-RATE-$i\",
             \"accountId\": \"ACC-001\",
@@ -76,9 +77,9 @@ for i in {1..25}; do
     HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     BODY=$(echo "$RESPONSE" | sed '$d')
     
-    if [ "$HTTP_CODE" = "200" ]; then
+    if [ "$HTTP_CODE" = "202" ]; then
         STATUS=$(echo "$BODY" | jq -r '.status' 2>/dev/null || echo "UNKNOWN")
-        if [ "$STATUS" = "SUCCESS" ] || [ "$STATUS" = "BUFFERED" ]; then
+            if [ "$STATUS" = "ACCEPTED" ]; then
             SUCCESS=$((SUCCESS + 1))
         elif [ "$STATUS" = "FAILED" ]; then
             ERROR_CODE=$(echo "$BODY" | jq -r '.error.code' 2>/dev/null || echo "")

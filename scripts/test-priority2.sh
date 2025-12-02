@@ -7,6 +7,17 @@ set -e
 BASE_URL="${BASE_URL:-http://localhost:8080}"
 CORRELATION_ID="test-$(date +%s)"
 
+# Generate unique ID without uuidgen (cross-platform compatible)
+generate_unique_id() {
+    # Generate a unique ID using timestamp and random
+    local prefix="${1:-}"
+    if [ -n "$prefix" ]; then
+        echo "${prefix}-$(date +%s%N | sha256sum 2>/dev/null | head -c 16 || echo "$(date +%s)-$RANDOM")"
+    else
+        echo "$(date +%s%N | sha256sum 2>/dev/null | head -c 16 || echo "$(date +%s)-$RANDOM")"
+    fi
+}
+
 echo "=========================================="
 echo "Priority 2 Features Test"
 echo "=========================================="
@@ -29,7 +40,7 @@ echo ""
 # Test 2: Async Trade Processing
 echo "=== Test 2: Async Trade Processing ==="
 TRADE_ID="ASYNC-TEST-$(date +%s)"
-JOB_RESPONSE=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture/async" \
+JOB_RESPONSE=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
   -d "{
@@ -54,9 +65,10 @@ JOB_RESPONSE=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture/async" \
     }],
     \"counterpartyIds\": [\"CP-001\"],
     \"tradeDate\": \"$(date +%Y-%m-%d)\"
-  }")
+  }" \
+  -H "X-Callback-Url: http://example.com/callback")
 
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/v1/trades/capture/async" \
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
   -d "{
@@ -81,7 +93,8 @@ HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/v1/t
     }],
     \"counterpartyIds\": [\"CP-001\"],
     \"tradeDate\": \"$(date +%Y-%m-%d)\"
-  }")
+  }" \
+  -H "X-Callback-Url: http://example.com/callback")
 
 if [ "$HTTP_STATUS" = "202" ]; then
     echo "✅ Async endpoint returned 202 Accepted"
@@ -159,13 +172,14 @@ SYNC_RESPONSE=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
     }],
     \"counterpartyIds\": [\"CP-001\"],
     \"tradeDate\": \"$(date +%Y-%m-%d)\"
-  }")
+  }" \
+  -H "X-Callback-Url: http://example.com/callback")
 
 SYNC_STATUS=$(echo "$SYNC_RESPONSE" | jq -r '.status // "UNKNOWN"')
-if [ "$SYNC_STATUS" = "SUCCESS" ] || [ "$SYNC_STATUS" = "DUPLICATE" ]; then
-    echo "✅ Synchronous trade processed: $SYNC_STATUS"
+if [ "$SYNC_STATUS" = "ACCEPTED" ]; then
+    echo "✅ Trade accepted for async processing: $SYNC_STATUS"
 else
-    echo "⚠️  Synchronous trade status: $SYNC_STATUS"
+    echo "⚠️  Trade status: $SYNC_STATUS"
 fi
 echo ""
 

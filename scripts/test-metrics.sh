@@ -83,10 +83,11 @@ echo "Processing trade: $TRADE_ID"
 TRADE_RESPONSE=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "$TRADE_PAYLOAD")
 
 TRADE_STATUS=$(echo "$TRADE_RESPONSE" | jq -r '.status // "ERROR"')
-if [ "$TRADE_STATUS" = "SUCCESS" ] || [ "$TRADE_STATUS" = "DUPLICATE" ]; then
+if [ "$TRADE_STATUS" = "ACCEPTED" ]; then
     echo "✅ Trade processed: $TRADE_STATUS"
 else
     echo "❌ Trade processing failed: $TRADE_STATUS"

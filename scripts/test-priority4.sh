@@ -35,6 +35,7 @@ echo "Submitting trade with sequence 1..."
 TRADE_1=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "{
     \"tradeId\": \"SEQ-1-$(date +%s)\",
     \"accountId\": \"ACC-SEQ\",
@@ -61,7 +62,7 @@ TRADE_1=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   }")
 
 STATUS_1=$(echo "$TRADE_1" | jq -r '.status // "UNKNOWN"')
-if [ "$STATUS_1" = "SUCCESS" ]; then
+if [ "$STATUS_1" = "ACCEPTED" ]; then
     echo "✅ Trade with sequence 1 processed: $STATUS_1"
 else
     echo "⚠️  Trade with sequence 1 status: $STATUS_1"
@@ -73,6 +74,7 @@ echo "Submitting trade with sequence 2..."
 TRADE_2=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "{
     \"tradeId\": \"SEQ-2-$(date +%s)\",
     \"accountId\": \"ACC-SEQ\",
@@ -99,7 +101,7 @@ TRADE_2=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   }")
 
 STATUS_2=$(echo "$TRADE_2" | jq -r '.status // "UNKNOWN"')
-if [ "$STATUS_2" = "SUCCESS" ]; then
+if [ "$STATUS_2" = "ACCEPTED" ]; then
     echo "✅ Trade with sequence 2 processed: $STATUS_2"
 else
     echo "⚠️  Trade with sequence 2 status: $STATUS_2"
@@ -115,6 +117,7 @@ echo "Submitting trade with sequence 5 (gap: expecting 1)..."
 TRADE_5=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "{
     \"tradeId\": \"SEQ-BUFFER-5-$(date +%s)\",
     \"accountId\": \"ACC-BUFFER\",
@@ -153,6 +156,7 @@ echo "Submitting trade with sequence 1 (should process and trigger buffer proces
 TRADE_1_BUFFER=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "{
     \"tradeId\": \"SEQ-BUFFER-1-$(date +%s)\",
     \"accountId\": \"ACC-BUFFER\",
@@ -179,7 +183,7 @@ TRADE_1_BUFFER=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   }")
 
 STATUS_1_BUFFER=$(echo "$TRADE_1_BUFFER" | jq -r '.status // "UNKNOWN"')
-if [ "$STATUS_1_BUFFER" = "SUCCESS" ]; then
+if [ "$STATUS_1_BUFFER" = "ACCEPTED" ]; then
     echo "✅ Trade with sequence 1 processed: $STATUS_1_BUFFER"
     echo "   This should trigger processing of buffered sequence 5"
 else
@@ -196,6 +200,7 @@ echo "Submitting trade with sequence 1..."
 curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "{
     \"tradeId\": \"SEQ-REJECT-1-$(date +%s)\",
     \"accountId\": \"ACC-REJECT\",
@@ -227,6 +232,7 @@ echo "Submitting trade with sequence 0 (should be rejected as too old)..."
 TRADE_0=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "{
     \"tradeId\": \"SEQ-REJECT-0-$(date +%s)\",
     \"accountId\": \"ACC-REJECT\",
@@ -269,6 +275,7 @@ echo "Submitting trade with sequence 200 (gap too large, should be rejected)..."
 TRADE_200=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "{
     \"tradeId\": \"SEQ-GAP-200-$(date +%s)\",
     \"accountId\": \"ACC-GAP\",
@@ -318,6 +325,7 @@ echo "=== Test 7: Trade Without Sequence Number (Backward Compatibility) ==="
 TRADE_NO_SEQ=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "{
     \"tradeId\": \"NO-SEQ-$(date +%s)\",
     \"accountId\": \"ACC-NO-SEQ\",
@@ -343,7 +351,7 @@ TRADE_NO_SEQ=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   }")
 
 STATUS_NO_SEQ=$(echo "$TRADE_NO_SEQ" | jq -r '.status // "UNKNOWN"')
-if [ "$STATUS_NO_SEQ" = "SUCCESS" ] || [ "$STATUS_NO_SEQ" = "DUPLICATE" ]; then
+if [ "$STATUS_NO_SEQ" = "ACCEPTED" ]; then
     echo "✅ Trade without sequence number processed: $STATUS_NO_SEQ"
     echo "   Backward compatibility confirmed"
 else

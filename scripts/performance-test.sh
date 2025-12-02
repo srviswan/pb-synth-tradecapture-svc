@@ -8,6 +8,17 @@ RESULTS_DIR="${RESULTS_DIR:-./performance-results}"
 
 mkdir -p "$RESULTS_DIR"
 
+# Generate unique ID without uuidgen (cross-platform compatible)
+generate_unique_id() {
+    # Generate a unique ID using timestamp and random
+    local prefix="${1:-}"
+    if [ -n "$prefix" ]; then
+        echo "${prefix}-$(date +%s%N | sha256sum 2>/dev/null | head -c 16 || echo "$(date +%s)-$RANDOM")"
+    else
+        echo "$(date +%s%N | sha256sum 2>/dev/null | head -c 16 || echo "$(date +%s)-$RANDOM")"
+    fi
+}
+
 echo "=========================================="
 echo "Trade Capture Service Performance Tests"
 echo "=========================================="
@@ -72,7 +83,7 @@ process_trade() {
     local trade_id=$1
     local account_id=$2
     local book_id=$3
-    local idempotency_key="${trade_id}-$(uuidgen | tr -d '-' | head -c 16)"
+    local idempotency_key=$(generate_unique_id "$trade_id")
     
     local start_time=$(date +%s%N)
     local response=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/trades/capture" \
@@ -85,17 +96,13 @@ process_trade() {
     local http_code=$(echo "$response" | tail -n1)
     local latency_ms=$(( (end_time - start_time) / 1000000 ))
     
-    # Check for success (202 Accepted for async, 200/201 for sync, 409 for duplicate)
-    if [ "$http_code" -eq 202 ] || [ "$http_code" -eq 200 ] || [ "$http_code" -eq 201 ]; then
-        echo "$latency_ms"
-        return 0
-    elif [ "$http_code" -eq 409 ]; then
-        # Duplicate trade - count as success for performance testing
+    # Check for success (202 Accepted for async processing)
+    if [ "$http_code" -eq 202 ]; then
         echo "$latency_ms"
         return 0
     else
         # Log error for debugging
-        if [ "$http_code" != "202" ] && [ "$http_code" != "200" ] && [ "$http_code" != "201" ] && [ "$http_code" != "409" ]; then
+        if [ "$http_code" != "202" ]; then
             echo "Error: HTTP $http_code for trade $trade_id" >&2
         fi
         echo "-1"

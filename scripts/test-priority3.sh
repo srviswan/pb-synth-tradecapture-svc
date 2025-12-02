@@ -33,6 +33,7 @@ TRADE_ID_1="CACHE-TEST-1-$(date +%s)"
 RESPONSE_1=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "{
     \"tradeId\": \"$TRADE_ID_1\",
     \"accountId\": \"ACC-CACHE-1\",
@@ -58,8 +59,8 @@ RESPONSE_1=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   }")
 
 STATUS_1=$(echo "$RESPONSE_1" | jq -r '.status // "UNKNOWN"')
-if [ "$STATUS_1" = "SUCCESS" ] || [ "$STATUS_1" = "DUPLICATE" ]; then
-    echo "✅ First trade processed: $STATUS_1"
+if [ "$STATUS_1" = "ACCEPTED" ]; then
+    echo "✅ First trade accepted: $STATUS_1"
     echo "   Partition state should now be cached"
 else
     echo "⚠️  First trade status: $STATUS_1"
@@ -71,6 +72,7 @@ TRADE_ID_2="CACHE-TEST-2-$(date +%s)"
 RESPONSE_2=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "{
     \"tradeId\": \"$TRADE_ID_2\",
     \"accountId\": \"ACC-CACHE-1\",
@@ -96,8 +98,8 @@ RESPONSE_2=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   }")
 
 STATUS_2=$(echo "$RESPONSE_2" | jq -r '.status // "UNKNOWN"')
-if [ "$STATUS_2" = "SUCCESS" ] || [ "$STATUS_2" = "DUPLICATE" ]; then
-    echo "✅ Second trade processed: $STATUS_2"
+if [ "$STATUS_2" = "ACCEPTED" ]; then
+    echo "✅ Second trade accepted: $STATUS_2"
     echo "   Partition state should have been retrieved from cache"
 else
     echo "⚠️  Second trade status: $STATUS_2"
@@ -111,6 +113,7 @@ TRADE_ID_3="REF-CACHE-1-$(date +%s)"
 RESPONSE_3=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "{
     \"tradeId\": \"$TRADE_ID_3\",
     \"accountId\": \"ACC-REF-1\",
@@ -136,8 +139,8 @@ RESPONSE_3=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   }")
 
 STATUS_3=$(echo "$RESPONSE_3" | jq -r '.status // "UNKNOWN"')
-if [ "$STATUS_3" = "SUCCESS" ] || [ "$STATUS_3" = "DUPLICATE" ]; then
-    echo "✅ First reference data lookup processed: $STATUS_3"
+if [ "$STATUS_3" = "ACCEPTED" ]; then
+    echo "✅ First reference data lookup accepted: $STATUS_3"
     echo "   Security/Account data should now be cached"
 fi
 
@@ -146,6 +149,7 @@ TRADE_ID_4="REF-CACHE-2-$(date +%s)"
 RESPONSE_4=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: $CORRELATION_ID" \
+  -H "X-Callback-Url: http://example.com/callback" \
   -d "{
     \"tradeId\": \"$TRADE_ID_4\",
     \"accountId\": \"ACC-REF-1\",
@@ -171,8 +175,8 @@ RESPONSE_4=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
   }")
 
 STATUS_4=$(echo "$RESPONSE_4" | jq -r '.status // "UNKNOWN"')
-if [ "$STATUS_4" = "SUCCESS" ] || [ "$STATUS_4" = "DUPLICATE" ]; then
-    echo "✅ Second reference data lookup processed: $STATUS_4"
+if [ "$STATUS_4" = "ACCEPTED" ]; then
+    echo "✅ Second reference data lookup accepted: $STATUS_4"
     echo "   Security/Account data should have been retrieved from cache"
 fi
 echo ""
@@ -201,6 +205,7 @@ for i in $(seq 1 $PARTITION_COUNT); do
     RESPONSE=$(curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
       -H "Content-Type: application/json" \
       -H "X-Correlation-ID: $CORRELATION_ID" \
+      -H "X-Callback-Url: http://example.com/callback" \
       -d "{
         \"tradeId\": \"$TRADE_ID\",
         \"accountId\": \"ACC-CONC-$i\",
@@ -253,6 +258,7 @@ for i in $(seq 1 3); do
     curl -s -X POST "$BASE_URL/api/v1/trades/capture" \
       -H "Content-Type: application/json" \
       -H "X-Correlation-ID: $CORRELATION_ID" \
+      -H "X-Callback-Url: http://example.com/callback" \
       -d "{
         \"tradeId\": \"$TRADE_ID\",
         \"accountId\": \"ACC-PERF\",
