@@ -1,6 +1,8 @@
 package com.pb.synth.tradecapture.model;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.pb.synth.tradecapture.testutil.TestFixtures;
 import com.pb.synth.tradecapture.testutil.TradeCaptureRequestBuilder;
 import org.junit.jupiter.api.DisplayName;
@@ -19,7 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("TradeCaptureRequest Model Tests")
 class TradeCaptureRequestTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     @Nested
     @DisplayName("Serialization/Deserialization")

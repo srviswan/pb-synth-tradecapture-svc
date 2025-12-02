@@ -1,5 +1,7 @@
 package com.pb.synth.tradecapture.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -21,6 +23,7 @@ import java.util.Map;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class TradeCaptureRequest {
 
     @NotBlank(message = "tradeId is required")
@@ -80,6 +83,7 @@ public class TradeCaptureRequest {
     /**
      * Computed partition key: {accountId}_{bookId}_{securityId}
      */
+    @JsonIgnore
     public String getPartitionKey() {
         return String.format("%s_%s_%s", accountId, bookId, securityId);
     }

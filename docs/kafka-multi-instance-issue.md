@@ -58,3 +58,4 @@ After applying fixes:
 - **Dynamic partition scaling**: For production, consider using Kafka's partition reassignment tools if you need to scale partitions dynamically
 - **Monitor consumer lag**: Use Kafka consumer group tools to monitor lag and ensure proper load distribution
 
+

@@ -1,5 +1,6 @@
 package com.pb.synth.tradecapture.integration.messaging;
 
+import com.pb.synth.tradecapture.TradeCaptureServiceApplication;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -12,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Integration tests for Solace message queue.
  * Note: Solace test container may not be available, so these tests use mocked/embedded Solace.
  */
-@SpringBootTest
+@SpringBootTest(classes = TradeCaptureServiceApplication.class)
 @ActiveProfiles("test-mocked")
 @DisplayName("Solace Message Queue Integration Tests")
 class SolaceIntegrationTest {

@@ -5,6 +5,7 @@ import com.pb.synth.tradecapture.service.JobStatusService;
 import com.pb.synth.tradecapture.service.QuickValidationService;
 import com.pb.synth.tradecapture.service.SwapBlotterService;
 import com.pb.synth.tradecapture.service.TradePublishingService;
+import com.pb.synth.tradecapture.service.backpressure.BackpressureService;
 import com.pb.synth.tradecapture.testutil.TradeCaptureRequestBuilder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -46,12 +47,17 @@ class TradeCaptureControllerTest {
     @MockBean
     private QuickValidationService quickValidationService;
 
+    @MockBean
+    private BackpressureService backpressureService;
+
     @Autowired
     private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
         // Setup common mocks
+        // Mock backpressure service to allow all requests
+        when(backpressureService.canAcceptApiRequest()).thenReturn(true);
     }
 
     @Nested

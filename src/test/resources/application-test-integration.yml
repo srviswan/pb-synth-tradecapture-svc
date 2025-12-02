@@ -17,7 +17,7 @@ spring:
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.SQLServerDialect
+        dialect: org.hibernate.dialect.H2Dialect
         format_sql: true
   data:
     redis:

@@ -269,3 +269,4 @@ docker logs pb-synth-tradecapture-svc | jq .
 
 
 
+

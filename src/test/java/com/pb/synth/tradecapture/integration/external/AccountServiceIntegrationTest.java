@@ -1,6 +1,7 @@
 package com.pb.synth.tradecapture.integration.external;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.pb.synth.tradecapture.TradeCaptureServiceApplication;
 import com.pb.synth.tradecapture.testutil.TestFixtures;
 import com.pb.synth.tradecapture.testutil.WireMockHelper;
 import org.junit.jupiter.api.AfterEach;
@@ -16,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Integration tests for AccountService using WireMock.
  */
-@SpringBootTest
+@SpringBootTest(classes = TradeCaptureServiceApplication.class)
 @ActiveProfiles("test-mocked")
 @DisplayName("AccountService Integration Tests")
 class AccountServiceIntegrationTest {

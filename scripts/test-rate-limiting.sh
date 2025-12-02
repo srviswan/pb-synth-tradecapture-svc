@@ -139,3 +139,4 @@ echo "Rate Limit Status:"
 curl -s "$BASE_URL/api/v1/rate-limit/status/$PARTITION_KEY" | jq '.' 2>/dev/null || echo "Failed to get status"
 
 
+

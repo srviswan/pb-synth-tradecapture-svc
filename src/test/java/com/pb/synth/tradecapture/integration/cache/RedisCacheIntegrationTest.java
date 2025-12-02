@@ -1,5 +1,6 @@
 package com.pb.synth.tradecapture.integration.cache;
 
+import com.pb.synth.tradecapture.TradeCaptureServiceApplication;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Integration tests for Redis cache using embedded Redis or Testcontainers.
  */
-@SpringBootTest
+@SpringBootTest(classes = TradeCaptureServiceApplication.class)
 @Testcontainers
 @ActiveProfiles("test-integration")
 @DisplayName("Redis Cache Integration Tests")

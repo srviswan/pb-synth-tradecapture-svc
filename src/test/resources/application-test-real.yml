@@ -1,6 +1,15 @@
 spring:
   application:
     name: pb-synth-tradecapture-svc-test-real
+  datasource:
+    url: ${DATABASE_URL:jdbc:sqlserver://localhost:1433;databaseName=tradecapture_test;encrypt=true;trustServerCertificate=true}
+    username: ${DATABASE_USERNAME:sa}
+    password: ${DATABASE_PASSWORD:YourStrong@Passw0rd}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
 
 # Real services configuration for E2E testing
 # These should point to test environment services
@@ -36,21 +45,6 @@ services:
     retry:
       max-attempts: 3
       backoff-delay: 1000
-
-# Real Redis (test environment)
-spring:
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-
-# Real Database (test environment) - MS SQL Server
-spring:
-  datasource:
-    url: ${DATABASE_URL:jdbc:sqlserver://localhost:1433;databaseName=tradecapture_test;encrypt=true;trustServerCertificate=true}
-    username: ${DATABASE_USERNAME:sa}
-    password: ${DATABASE_PASSWORD:YourStrong@Passw0rd}
 
 # Real Solace (test environment)
 solace:

@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Integration tests for StateRepository using Testcontainers.
+ * Requires Docker to be running.
  */
 @DataJpaTest
 @Testcontainers
