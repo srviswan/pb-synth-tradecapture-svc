@@ -270,13 +270,15 @@ echo ""
 # Test 6: Rules Application
 echo "=== Test 6: Rules Application ==="
 # Check rules endpoint
-rules_response=$(curl -s "$BASE_URL/../rules" 2>/dev/null || curl -s "http://localhost:8080/api/v1/rules")
+rules_response=$(curl -s "$BASE_URL/rules" 2>&1)
 if echo "$rules_response" | jq -e '.economic' > /dev/null 2>&1; then
     print_test_result "Rules endpoint accessible" 1
     echo "  Rules API is available"
+    echo "$rules_response" | jq '.' > "$RESULTS_DIR/rules-response.json" 2>/dev/null
 else
     print_test_result "Rules endpoint accessible" 0
     echo "  Error: Rules endpoint not accessible"
+    echo "  Response: $rules_response"
 fi
 echo ""
 

@@ -8,7 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -145,11 +144,75 @@ public class MessageConverter {
             builder.setIdempotencyKey(idempotencyKey);
             
             // Convert trade lots
-            request.getTradeLots().forEach(tradeLot -> {
-                TradeCaptureProto.TradeLot.Builder lotBuilder = TradeCaptureProto.TradeLot.newBuilder();
-                // TODO: Convert TradeLot details to protobuf
-                builder.addTradeLots(lotBuilder.build());
-            });
+            if (request.getTradeLots() != null) {
+                for (TradeLot tradeLot : request.getTradeLots()) {
+                    TradeCaptureProto.TradeLot.Builder lotBuilder = TradeCaptureProto.TradeLot.newBuilder();
+                    
+                    // Convert lot identifiers
+                    if (tradeLot.getLotIdentifier() != null) {
+                        for (com.pb.synth.tradecapture.model.Identifier identifier : tradeLot.getLotIdentifier()) {
+                            TradeCaptureProto.Identifier protoId = TradeCaptureProto.Identifier.newBuilder()
+                                .setIdentifier(identifier.getIdentifier() != null ? identifier.getIdentifier() : "")
+                                .setIdentifierType(identifier.getIdentifierType() != null ? identifier.getIdentifierType() : "")
+                                .build();
+                            lotBuilder.addLotIdentifier(protoId);
+                        }
+                    }
+                    
+                    // Convert price quantity
+                    if (tradeLot.getPriceQuantity() != null) {
+                        for (com.pb.synth.tradecapture.model.PriceQuantity pq : tradeLot.getPriceQuantity()) {
+                            TradeCaptureProto.PriceQuantity.Builder pqBuilder = TradeCaptureProto.PriceQuantity.newBuilder();
+                            
+                            // Convert quantities
+                            if (pq.getQuantity() != null) {
+                                for (com.pb.synth.tradecapture.model.Quantity qty : pq.getQuantity()) {
+                                    TradeCaptureProto.Quantity.Builder qtyBuilder = TradeCaptureProto.Quantity.newBuilder()
+                                        .setValue(qty.getValue() != null ? qty.getValue() : 0.0);
+                                    
+                                    // Convert unit
+                                    if (qty.getUnit() != null) {
+                                        TradeCaptureProto.Unit.Builder unitBuilder = TradeCaptureProto.Unit.newBuilder();
+                                        if (qty.getUnit().getCurrency() != null) {
+                                            unitBuilder.setCurrency(qty.getUnit().getCurrency());
+                                        }
+                                        if (qty.getUnit().getFinancialUnit() != null) {
+                                            unitBuilder.setFinancialUnit(qty.getUnit().getFinancialUnit());
+                                        }
+                                        qtyBuilder.setUnit(unitBuilder.build());
+                                    }
+                                    pqBuilder.addQuantity(qtyBuilder.build());
+                                }
+                            }
+                            
+                            // Convert prices
+                            if (pq.getPrice() != null) {
+                                for (com.pb.synth.tradecapture.model.Price price : pq.getPrice()) {
+                                    TradeCaptureProto.Price.Builder priceBuilder = TradeCaptureProto.Price.newBuilder()
+                                        .setValue(price.getValue() != null ? price.getValue() : 0.0);
+                                    
+                                    // Convert unit
+                                    if (price.getUnit() != null) {
+                                        TradeCaptureProto.Unit.Builder unitBuilder = TradeCaptureProto.Unit.newBuilder();
+                                        if (price.getUnit().getCurrency() != null) {
+                                            unitBuilder.setCurrency(price.getUnit().getCurrency());
+                                        }
+                                        if (price.getUnit().getFinancialUnit() != null) {
+                                            unitBuilder.setFinancialUnit(price.getUnit().getFinancialUnit());
+                                        }
+                                        priceBuilder.setUnit(unitBuilder.build());
+                                    }
+                                    pqBuilder.addPrice(priceBuilder.build());
+                                }
+                            }
+                            
+                            lotBuilder.addPriceQuantity(pqBuilder.build());
+                        }
+                    }
+                    
+                    builder.addTradeLots(lotBuilder.build());
+                }
+            }
             
             // Convert metadata
             if (request.getMetadata() != null) {
@@ -191,9 +254,78 @@ public class MessageConverter {
     }
     
     private List<TradeLot> convertTradeLots(List<TradeCaptureProto.TradeLot> protoLots) {
-        // TODO: Implement full conversion of TradeLot from protobuf
-        // For now, return empty list - this needs to be implemented based on TradeLot structure
-        return new ArrayList<>();
+        if (protoLots == null || protoLots.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        List<TradeLot> tradeLots = new ArrayList<>();
+        for (TradeCaptureProto.TradeLot protoLot : protoLots) {
+            TradeLot.TradeLotBuilder lotBuilder = TradeLot.builder();
+            
+            // Convert lot identifiers
+            List<com.pb.synth.tradecapture.model.Identifier> identifiers = new ArrayList<>();
+            for (TradeCaptureProto.Identifier protoId : protoLot.getLotIdentifierList()) {
+                identifiers.add(com.pb.synth.tradecapture.model.Identifier.builder()
+                    .identifier(protoId.getIdentifier())
+                    .identifierType(protoId.getIdentifierType())
+                    .build());
+            }
+            lotBuilder.lotIdentifier(identifiers);
+            
+            // Convert price quantity
+            List<com.pb.synth.tradecapture.model.PriceQuantity> priceQuantities = new ArrayList<>();
+            for (TradeCaptureProto.PriceQuantity protoPq : protoLot.getPriceQuantityList()) {
+                com.pb.synth.tradecapture.model.PriceQuantity.PriceQuantityBuilder pqBuilder = 
+                    com.pb.synth.tradecapture.model.PriceQuantity.builder();
+                
+                // Convert quantities
+                List<com.pb.synth.tradecapture.model.Quantity> quantities = new ArrayList<>();
+                for (TradeCaptureProto.Quantity protoQty : protoPq.getQuantityList()) {
+                    com.pb.synth.tradecapture.model.Quantity.QuantityBuilder qtyBuilder = 
+                        com.pb.synth.tradecapture.model.Quantity.builder()
+                            .value(protoQty.getValue());
+                    
+                    // Convert unit
+                    if (protoQty.hasUnit()) {
+                        TradeCaptureProto.Unit protoUnit = protoQty.getUnit();
+                        com.pb.synth.tradecapture.model.Unit unit = com.pb.synth.tradecapture.model.Unit.builder()
+                            .currency(protoUnit.getCurrency().isEmpty() ? null : protoUnit.getCurrency())
+                            .financialUnit(protoUnit.getFinancialUnit().isEmpty() ? null : protoUnit.getFinancialUnit())
+                            .build();
+                        qtyBuilder.unit(unit);
+                    }
+                    quantities.add(qtyBuilder.build());
+                }
+                pqBuilder.quantity(quantities);
+                
+                // Convert prices
+                List<com.pb.synth.tradecapture.model.Price> prices = new ArrayList<>();
+                for (TradeCaptureProto.Price protoPrice : protoPq.getPriceList()) {
+                    com.pb.synth.tradecapture.model.Price.PriceBuilder priceBuilder = 
+                        com.pb.synth.tradecapture.model.Price.builder()
+                            .value(protoPrice.getValue());
+                    
+                    // Convert unit
+                    if (protoPrice.hasUnit()) {
+                        TradeCaptureProto.Unit protoUnit = protoPrice.getUnit();
+                        com.pb.synth.tradecapture.model.Unit unit = com.pb.synth.tradecapture.model.Unit.builder()
+                            .currency(protoUnit.getCurrency().isEmpty() ? null : protoUnit.getCurrency())
+                            .financialUnit(protoUnit.getFinancialUnit().isEmpty() ? null : protoUnit.getFinancialUnit())
+                            .build();
+                        priceBuilder.unit(unit);
+                    }
+                    prices.add(priceBuilder.build());
+                }
+                pqBuilder.price(prices);
+                
+                priceQuantities.add(pqBuilder.build());
+            }
+            lotBuilder.priceQuantity(priceQuantities);
+            
+            tradeLots.add(lotBuilder.build());
+        }
+        
+        return tradeLots;
     }
     
     private Map<String, Object> convertMetadata(Map<String, String> protoMetadata) {

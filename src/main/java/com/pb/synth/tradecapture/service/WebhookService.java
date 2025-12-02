@@ -68,10 +68,12 @@ public class WebhookService {
             }
             
             if (jobStatus.getError() != null) {
-                payload.put("error", Map.of(
-                    "code", jobStatus.getError().getCode(),
-                    "message", jobStatus.getError().getMessage()
-                ));
+                Map<String, String> errorMap = new HashMap<>();
+                errorMap.put("code", jobStatus.getError().getCode() != null ? 
+                    jobStatus.getError().getCode() : "UNKNOWN");
+                errorMap.put("message", jobStatus.getError().getMessage() != null ? 
+                    jobStatus.getError().getMessage() : "No error message");
+                payload.put("error", errorMap);
             }
             
             // Send webhook with retry

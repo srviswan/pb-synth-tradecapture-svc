@@ -8,6 +8,7 @@ import com.pb.synth.tradecapture.repository.entity.IdempotencyStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -155,11 +156,20 @@ public class IdempotencyService {
     /**
      * Create idempotency record for new trade.
      * Uses REQUIRES_NEW to isolate deadlocks from outer transaction.
+     * 
+     * If a duplicate key violation occurs (race condition), returns the existing record.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public IdempotencyRecordEntity createIdempotencyRecord(TradeCaptureRequest request) {
         String idempotencyKey = request.getIdempotencyKey();
         String partitionKey = request.getPartitionKey();
+        
+        // Double-check for existing record (defensive check before insert)
+        Optional<IdempotencyRecordEntity> existing = idempotencyRepository.findByIdempotencyKey(idempotencyKey);
+        if (existing.isPresent()) {
+            log.debug("Idempotency record already exists (race condition detected): {}", idempotencyKey);
+            return existing.get();
+        }
         
         IdempotencyRecordEntity record = IdempotencyRecordEntity.builder()
             .idempotencyKey(idempotencyKey)
@@ -170,22 +180,37 @@ public class IdempotencyService {
             .expiresAt(LocalDateTime.now().plusHours(idempotencyWindowHours))
             .build();
         
-        IdempotencyRecordEntity saved = idempotencyRepository.save(record);
-        
-        // Cache in Redis immediately
-        if (redisCacheEnabled) {
-            cacheInRedis(idempotencyKey, STATUS_PROCESSING, null);
-            // Cache tradeId for later lookup
-            try {
-                String cacheKey = String.format(CACHE_KEY_FORMAT, redisKeyPrefix, idempotencyKey);
-                String tradeIdKey = cacheKey + ":tradeId";
-                redisTemplate.opsForValue().set(tradeIdKey, request.getTradeId(), Duration.ofSeconds(redisTtlSeconds));
-            } catch (Exception e) {
-                log.warn("Error caching tradeId in Redis", e);
+        try {
+            IdempotencyRecordEntity saved = idempotencyRepository.save(record);
+            
+            // Cache in Redis immediately
+            if (redisCacheEnabled) {
+                cacheInRedis(idempotencyKey, STATUS_PROCESSING, null);
+                // Cache tradeId for later lookup
+                try {
+                    String cacheKey = String.format(CACHE_KEY_FORMAT, redisKeyPrefix, idempotencyKey);
+                    String tradeIdKey = cacheKey + ":tradeId";
+                    redisTemplate.opsForValue().set(tradeIdKey, request.getTradeId(), Duration.ofSeconds(redisTtlSeconds));
+                } catch (Exception e) {
+                    log.warn("Error caching tradeId in Redis", e);
+                }
             }
+            
+            return saved;
+        } catch (DataIntegrityViolationException e) {
+            // Handle race condition: another thread inserted the record between our check and insert
+            log.debug("Duplicate idempotency key detected (race condition): {}, returning existing record", idempotencyKey);
+            
+            // Retrieve the existing record that was just created by another thread
+            Optional<IdempotencyRecordEntity> existingRecord = idempotencyRepository.findByIdempotencyKey(idempotencyKey);
+            if (existingRecord.isPresent()) {
+                return existingRecord.get();
+            }
+            
+            // This shouldn't happen, but handle gracefully
+            log.warn("Idempotency record not found after duplicate key violation: {}", idempotencyKey);
+            throw new RuntimeException("Failed to create idempotency record due to duplicate key violation", e);
         }
-        
-        return saved;
     }
 
     /**

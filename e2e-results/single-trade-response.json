@@ -1,58 +1,6 @@
 {
-  "tradeId": "E2E-TRADE-1764459347-AUTO",
-  "status": "SUCCESS",
-  "swapBlotter": {
-    "tradeId": "E2E-TRADE-1764459347-AUTO",
-    "partitionKey": "ACC-E2E-001_BOOK-E2E-001_US0378331005",
-    "tradeLots": [
-      {
-        "lotIdentifier": [
-          {
-            "identifier": "LOT-001",
-            "identifierType": "INTERNAL"
-          }
-        ],
-        "priceQuantity": [
-          {
-            "quantity": [
-              {
-                "value": 10000.0,
-                "unit": {
-                  "currency": null,
-                  "financialUnit": "Shares"
-                }
-              }
-            ],
-            "price": [
-              {
-                "value": 150.25,
-                "unit": {
-                  "currency": "USD",
-                  "financialUnit": null
-                }
-              }
-            ]
-          }
-        ]
-      }
-    ],
-    "contract": null,
-    "state": {
-      "positionState": "FORMED",
-      "closedState": null
-    },
-    "enrichmentStatus": "COMPLETE",
-    "workflowStatus": "APPROVED",
-    "processingMetadata": {
-      "processedAt": "2025-11-29T23:35:47.879942921Z",
-      "processingTimeMs": 258,
-      "rulesApplied": [],
-      "enrichmentSources": [
-        "SecurityMasterService",
-        "AccountService"
-      ]
-    },
-    "version": 0
-  },
-  "error": null
+  "status": "ACCEPTED",
+  "jobId": "eb3e81a1-137b-4f9b-b038-77a543c7e318",
+  "message": "Trade submitted for processing",
+  "statusUrl": "/api/v1/trades/jobs/eb3e81a1-137b-4f9b-b038-77a543c7e318/status"
 }
