@@ -1,11 +1,11 @@
 package com.pb.synth.tradecapture.service;
 
+import com.pb.synth.tradecapture.cache.DistributedCacheService;
 import com.pb.synth.tradecapture.model.TradeCaptureRequest;
 import com.pb.synth.tradecapture.repository.PartitionStateRepository;
 import com.pb.synth.tradecapture.repository.entity.PartitionStateEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Service for managing sequence numbers per partition.
@@ -26,7 +25,7 @@ import java.util.concurrent.TimeUnit;
 public class SequenceNumberService {
     
     private final PartitionStateRepository partitionStateRepository;
-    private final StringRedisTemplate redisTemplate;
+    private final DistributedCacheService distributedCacheService;
     
     private static final String SEQUENCE_PREFIX = "seq:partition:";
     private static final Duration SEQUENCE_CACHE_TTL = Duration.ofHours(24);
@@ -139,13 +138,13 @@ public class SequenceNumberService {
      * The expected next sequence would be highestProcessed + 1.
      */
     public long getExpectedSequenceNumber(String partitionKey) {
-        // Try Redis cache first
+        // Try distributed cache first
         String cacheKey = SEQUENCE_PREFIX + partitionKey;
-        String cached = redisTemplate.opsForValue().get(cacheKey);
+        Optional<String> cachedOpt = distributedCacheService.get(cacheKey);
         
-        if (cached != null) {
+        if (cachedOpt.isPresent()) {
             try {
-                long highestSequence = Long.parseLong(cached);
+                long highestSequence = Long.parseLong(cachedOpt.get());
                 // Return highest processed (expected next would be highest + 1)
                 return highestSequence;
             } catch (NumberFormatException e) {
@@ -159,8 +158,7 @@ public class SequenceNumberService {
             long highestSequence = stateOpt.get().getLastSequenceNumber();
             if (highestSequence > 0) {
                 // Cache it
-                redisTemplate.opsForValue().set(cacheKey, String.valueOf(highestSequence), 
-                    SEQUENCE_CACHE_TTL.toSeconds(), TimeUnit.SECONDS);
+                distributedCacheService.set(cacheKey, String.valueOf(highestSequence), SEQUENCE_CACHE_TTL);
                 return highestSequence;
             }
         }
@@ -195,22 +193,19 @@ public class SequenceNumberService {
 
         // Update cache - use max to ensure we track highest
         String cacheKey = SEQUENCE_PREFIX + partitionKey;
-        String cached = redisTemplate.opsForValue().get(cacheKey);
-        if (cached != null) {
+        Optional<String> cachedOpt = distributedCacheService.get(cacheKey);
+        if (cachedOpt.isPresent()) {
             try {
-                long currentHighest = Long.parseLong(cached);
+                long currentHighest = Long.parseLong(cachedOpt.get());
                 if (sequenceNumber > currentHighest) {
-                    redisTemplate.opsForValue().set(cacheKey, String.valueOf(sequenceNumber), 
-                        SEQUENCE_CACHE_TTL.toSeconds(), TimeUnit.SECONDS);
+                    distributedCacheService.set(cacheKey, String.valueOf(sequenceNumber), SEQUENCE_CACHE_TTL);
                 }
             } catch (NumberFormatException e) {
                 // If cache is invalid, update it
-                redisTemplate.opsForValue().set(cacheKey, String.valueOf(sequenceNumber), 
-                    SEQUENCE_CACHE_TTL.toSeconds(), TimeUnit.SECONDS);
+                distributedCacheService.set(cacheKey, String.valueOf(sequenceNumber), SEQUENCE_CACHE_TTL);
             }
         } else {
-            redisTemplate.opsForValue().set(cacheKey, String.valueOf(sequenceNumber), 
-                SEQUENCE_CACHE_TTL.toSeconds(), TimeUnit.SECONDS);
+            distributedCacheService.set(cacheKey, String.valueOf(sequenceNumber), SEQUENCE_CACHE_TTL);
         }
     }
     

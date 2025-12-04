@@ -55,7 +55,7 @@ spring:
     # Create database if it doesn't exist (connect to master first)
     create-schemas: true
   
-  # Redis configuration
+  # Redis configuration (used when cache.provider=redis)
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -68,6 +68,13 @@ spring:
           max-idle: ${REDIS_MAX_IDLE:10}
           min-idle: ${REDIS_MIN_IDLE:5}
 
+# Hazelcast configuration (used when cache.provider=hazelcast)
+hazelcast:
+  cluster-name: ${HAZELCAST_CLUSTER_NAME:tradecapture-cluster}
+  port: ${HAZELCAST_PORT:5701}
+  members: ${HAZELCAST_MEMBERS:}  # Comma-separated list of members for cluster mode
+  mode: ${HAZELCAST_MODE:embedded}  # embedded or client
+
 # Server configuration
 server:
   port: ${SERVER_PORT:8080}
@@ -78,15 +85,15 @@ idempotency:
   enabled: true
   window-hours: 24
   cache-ttl-hours: ${IDEMPOTENCY_CACHE_TTL_HOURS:12}
-  storage-type: redis+database
+  storage-type: cache+database
   key-strategy: tradeId
   allow-payload-differences: false
   retry-on-failure: true
-  # Redis cache configuration for idempotency checks
-  redis:
-    enabled: ${IDEMPOTENCY_REDIS_CACHE:true}
+  # Distributed cache configuration for idempotency checks (works with both Redis and Hazelcast)
+  cache:
+    enabled: ${IDEMPOTENCY_CACHE_ENABLED:true}
     key-prefix: "idempotency:"
-    ttl-seconds: ${IDEMPOTENCY_REDIS_TTL:43200}
+    ttl-seconds: ${IDEMPOTENCY_CACHE_TTL:43200}
 
 # Deadlock retry configuration
 deadlock-retry:
@@ -169,7 +176,10 @@ sequence:
     time-window-days: ${SEQUENCE_TIME_WINDOW_DAYS:7}  # Buffer trades within last 7 days
 
 # Cache configuration for Priority 3.2 - Query Result Caching
+# Cache provider configuration
+# Options: redis (default) or hazelcast
 cache:
+  provider: ${CACHE_PROVIDER:redis}  # redis or hazelcast
   partition-state:
     enabled: ${CACHE_PARTITION_STATE_ENABLED:true}
     key-prefix: ${CACHE_PARTITION_STATE_PREFIX:partition-state:}
@@ -369,8 +379,8 @@ logging:
 
 # Job status configuration
 job-status:
-  redis:
-    key-prefix: ${JOB_STATUS_REDIS_PREFIX:job-status:}
+  cache:
+    key-prefix: ${JOB_STATUS_CACHE_PREFIX:job-status:}
   retention-months: ${JOB_STATUS_RETENTION_MONTHS:3}  # 3 months retention
 
 # Webhook configuration

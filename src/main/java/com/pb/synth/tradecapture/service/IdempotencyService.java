@@ -1,5 +1,6 @@
 package com.pb.synth.tradecapture.service;
 
+import com.pb.synth.tradecapture.cache.DistributedCacheService;
 import com.pb.synth.tradecapture.model.SwapBlotter;
 import com.pb.synth.tradecapture.model.TradeCaptureRequest;
 import com.pb.synth.tradecapture.repository.IdempotencyRepository;
@@ -9,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +20,8 @@ import java.util.Optional;
 
 /**
  * Service for handling idempotency and duplicate detection.
- * Uses Redis cache (L1) + Database (L2) for optimal performance.
+ * Uses distributed cache (L1) + Database (L2) for optimal performance.
+ * Supports both Redis and Hazelcast via abstraction layer.
  */
 @Service
 @RequiredArgsConstructor
@@ -29,19 +30,19 @@ public class IdempotencyService {
 
     private final IdempotencyRepository idempotencyRepository;
     private final SwapBlotterService swapBlotterService;
-    private final StringRedisTemplate redisTemplate;
+    private final DistributedCacheService distributedCacheService;
 
     @Value("${idempotency.window-hours:24}")
     private int idempotencyWindowHours;
 
-    @Value("${idempotency.redis.enabled:true}")
-    private boolean redisCacheEnabled;
+    @Value("${idempotency.cache.enabled:true}")
+    private boolean cacheEnabled;
 
-    @Value("${idempotency.redis.key-prefix:idempotency:}")
-    private String redisKeyPrefix;
+    @Value("${idempotency.cache.key-prefix:idempotency:}")
+    private String cacheKeyPrefix;
 
-    @Value("${idempotency.redis.ttl-seconds:43200}")
-    private long redisTtlSeconds;
+    @Value("${idempotency.cache.ttl-seconds:43200}")
+    private long cacheTtlSeconds;
 
     private static final String CACHE_KEY_FORMAT = "%s%s"; // prefix + idempotencyKey
     private static final String STATUS_COMPLETED = "COMPLETED";
@@ -56,11 +57,11 @@ public class IdempotencyService {
     public Optional<SwapBlotter> checkDuplicate(TradeCaptureRequest request) {
         String idempotencyKey = request.getIdempotencyKey();
         
-        // Try Redis cache first (L1)
-        if (redisCacheEnabled) {
-            Optional<SwapBlotter> cached = checkRedisCache(idempotencyKey);
+        // Try distributed cache first (L1)
+        if (cacheEnabled) {
+            Optional<SwapBlotter> cached = checkCache(idempotencyKey);
             if (cached.isPresent()) {
-                log.debug("Found idempotency record in Redis cache: {}", idempotencyKey);
+                log.debug("Found idempotency record in cache: {}", idempotencyKey);
                 return cached;
             }
         }
@@ -80,9 +81,9 @@ public class IdempotencyService {
             // Check status
             if (record.getStatus() == IdempotencyStatus.COMPLETED) {
                 log.info("Duplicate trade detected: {}", idempotencyKey);
-                // Cache in Redis for future lookups
-                if (redisCacheEnabled) {
-                    cacheInRedis(idempotencyKey, STATUS_COMPLETED, record.getSwapBlotterId());
+                // Cache in distributed cache for future lookups
+                if (cacheEnabled) {
+                    cacheInDistributedCache(idempotencyKey, STATUS_COMPLETED, record.getSwapBlotterId());
                 }
                 // Return cached SwapBlotter
                 if (record.getSwapBlotterId() != null) {
@@ -91,8 +92,8 @@ public class IdempotencyService {
             } else if (record.getStatus() == IdempotencyStatus.PROCESSING) {
                 log.warn("Trade is still being processed: {}", idempotencyKey);
                 // Cache processing status to avoid repeated DB lookups
-                if (redisCacheEnabled) {
-                    cacheInRedis(idempotencyKey, STATUS_PROCESSING, null);
+                if (cacheEnabled) {
+                    cacheInDistributedCache(idempotencyKey, STATUS_PROCESSING, null);
                 }
             }
         }
@@ -101,24 +102,25 @@ public class IdempotencyService {
     }
 
     /**
-     * Check Redis cache for idempotency record.
+     * Check distributed cache for idempotency record.
      */
-    private Optional<SwapBlotter> checkRedisCache(String idempotencyKey) {
+    private Optional<SwapBlotter> checkCache(String idempotencyKey) {
         try {
-            String cacheKey = String.format(CACHE_KEY_FORMAT, redisKeyPrefix, idempotencyKey);
-            String status = redisTemplate.opsForValue().get(cacheKey);
+            String cacheKey = String.format(CACHE_KEY_FORMAT, cacheKeyPrefix, idempotencyKey);
+            Optional<String> statusOpt = distributedCacheService.get(cacheKey);
             
-            if (status != null) {
+            if (statusOpt.isPresent()) {
+                String status = statusOpt.get();
                 if (STATUS_COMPLETED.equals(status)) {
                     // Get swapBlotterId from a separate cache key
                     String swapBlotterIdKey = cacheKey + ":swapBlotterId";
-                    String swapBlotterId = redisTemplate.opsForValue().get(swapBlotterIdKey);
-                    if (swapBlotterId != null) {
+                    Optional<String> swapBlotterIdOpt = distributedCacheService.get(swapBlotterIdKey);
+                    if (swapBlotterIdOpt.isPresent()) {
                         // Get tradeId from another cache key
                         String tradeIdKey = cacheKey + ":tradeId";
-                        String tradeId = redisTemplate.opsForValue().get(tradeIdKey);
-                        if (tradeId != null) {
-                            return swapBlotterService.getSwapBlotterByTradeId(tradeId);
+                        Optional<String> tradeIdOpt = distributedCacheService.get(tradeIdKey);
+                        if (tradeIdOpt.isPresent()) {
+                            return swapBlotterService.getSwapBlotterByTradeId(tradeIdOpt.get());
                         }
                     }
                 } else if (STATUS_PROCESSING.equals(status)) {
@@ -128,7 +130,7 @@ public class IdempotencyService {
                 }
             }
         } catch (Exception e) {
-            log.warn("Error checking Redis cache for idempotency key: {}", idempotencyKey, e);
+            log.warn("Error checking cache for idempotency key: {}", idempotencyKey, e);
             // Fall through to database lookup
         }
         
@@ -136,19 +138,19 @@ public class IdempotencyService {
     }
 
     /**
-     * Cache idempotency status in Redis.
+     * Cache idempotency status in distributed cache.
      */
-    private void cacheInRedis(String idempotencyKey, String status, String swapBlotterId) {
+    private void cacheInDistributedCache(String idempotencyKey, String status, String swapBlotterId) {
         try {
-            String cacheKey = String.format(CACHE_KEY_FORMAT, redisKeyPrefix, idempotencyKey);
-            redisTemplate.opsForValue().set(cacheKey, status, Duration.ofSeconds(redisTtlSeconds));
+            String cacheKey = String.format(CACHE_KEY_FORMAT, cacheKeyPrefix, idempotencyKey);
+            distributedCacheService.set(cacheKey, status, Duration.ofSeconds(cacheTtlSeconds));
             
             if (swapBlotterId != null) {
                 String swapBlotterIdKey = cacheKey + ":swapBlotterId";
-                redisTemplate.opsForValue().set(swapBlotterIdKey, swapBlotterId, Duration.ofSeconds(redisTtlSeconds));
+                distributedCacheService.set(swapBlotterIdKey, swapBlotterId, Duration.ofSeconds(cacheTtlSeconds));
             }
         } catch (Exception e) {
-            log.warn("Error caching idempotency record in Redis: {}", idempotencyKey, e);
+            log.warn("Error caching idempotency record: {}", idempotencyKey, e);
             // Non-critical, continue without caching
         }
     }
@@ -183,16 +185,16 @@ public class IdempotencyService {
         try {
             IdempotencyRecordEntity saved = idempotencyRepository.save(record);
             
-            // Cache in Redis immediately
-            if (redisCacheEnabled) {
-                cacheInRedis(idempotencyKey, STATUS_PROCESSING, null);
+            // Cache in distributed cache immediately
+            if (cacheEnabled) {
+                cacheInDistributedCache(idempotencyKey, STATUS_PROCESSING, null);
                 // Cache tradeId for later lookup
                 try {
-                    String cacheKey = String.format(CACHE_KEY_FORMAT, redisKeyPrefix, idempotencyKey);
+                    String cacheKey = String.format(CACHE_KEY_FORMAT, cacheKeyPrefix, idempotencyKey);
                     String tradeIdKey = cacheKey + ":tradeId";
-                    redisTemplate.opsForValue().set(tradeIdKey, request.getTradeId(), Duration.ofSeconds(redisTtlSeconds));
+                    distributedCacheService.set(tradeIdKey, request.getTradeId(), Duration.ofSeconds(cacheTtlSeconds));
                 } catch (Exception e) {
-                    log.warn("Error caching tradeId in Redis", e);
+                    log.warn("Error caching tradeId", e);
                 }
             }
             
@@ -227,9 +229,9 @@ public class IdempotencyService {
             record.setCompletedAt(LocalDateTime.now());
             idempotencyRepository.save(record);
             
-            // Update Redis cache
-            if (redisCacheEnabled) {
-                cacheInRedis(idempotencyKey, STATUS_COMPLETED, swapBlotterId);
+            // Update distributed cache
+            if (cacheEnabled) {
+                cacheInDistributedCache(idempotencyKey, STATUS_COMPLETED, swapBlotterId);
             }
         }
     }
@@ -247,13 +249,13 @@ public class IdempotencyService {
             record.setCompletedAt(LocalDateTime.now());
             idempotencyRepository.save(record);
             
-            // Update Redis cache
-            if (redisCacheEnabled) {
+            // Update distributed cache
+            if (cacheEnabled) {
                 try {
-                    String cacheKey = String.format(CACHE_KEY_FORMAT, redisKeyPrefix, idempotencyKey);
-                    redisTemplate.opsForValue().set(cacheKey, STATUS_FAILED, Duration.ofSeconds(redisTtlSeconds));
+                    String cacheKey = String.format(CACHE_KEY_FORMAT, cacheKeyPrefix, idempotencyKey);
+                    distributedCacheService.set(cacheKey, STATUS_FAILED, Duration.ofSeconds(cacheTtlSeconds));
                 } catch (Exception e) {
-                    log.warn("Error updating Redis cache for failed idempotency", e);
+                    log.warn("Error updating cache for failed idempotency", e);
                 }
             }
         }

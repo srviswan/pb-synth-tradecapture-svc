@@ -25,6 +25,16 @@ spring:
       port: 6370
       timeout: 2000ms
 
+# Cache provider configuration - use Hazelcast for tests
+cache:
+  provider: hazelcast
+
+# Hazelcast configuration for tests (embedded mode)
+hazelcast:
+  cluster-name: test-cluster
+  port: 5701
+  mode: embedded
+
 services:
   security-master:
     mock: true
@@ -64,6 +74,19 @@ messaging:
     enabled: false
   solace:
     enabled: false
+
+# Idempotency cache configuration
+idempotency:
+  cache:
+    enabled: true
+    key-prefix: "idempotency:"
+    ttl-seconds: 43200
+
+# Job status cache configuration
+job-status:
+  cache:
+    key-prefix: "job-status:"
+  retention-months: 3
 
 # Logging
 logging:

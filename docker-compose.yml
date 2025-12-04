@@ -12,9 +12,13 @@ services:
       - DATABASE_URL=${DATABASE_URL:-jdbc:sqlserver://sqlserver:1433;databaseName=tradecapture;encrypt=true;trustServerCertificate=true}
       - DATABASE_USERNAME=${DATABASE_USERNAME:-sa}
       - DATABASE_PASSWORD=${DATABASE_PASSWORD:-YourStrong@Passw0rd}
+      - CACHE_PROVIDER=${CACHE_PROVIDER:-hazelcast}
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - HAZELCAST_CLUSTER_NAME=${HAZELCAST_CLUSTER_NAME:-tradecapture-cluster}
+      - HAZELCAST_PORT=${HAZELCAST_PORT:-5701}
+      - HAZELCAST_MODE=${HAZELCAST_MODE:-embedded}
       - KAFKA_ENABLED=true
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - SOLACE_ENABLED=${SOLACE_ENABLED:-false}

@@ -1,10 +1,10 @@
 package com.pb.synth.tradecapture.service.cache;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pb.synth.tradecapture.cache.DistributedCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -12,15 +12,16 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Redis cache service for reference data (security, account).
+ * Distributed cache service for reference data (security, account).
  * Reduces external service calls for frequently accessed reference data.
+ * Supports both Redis and Hazelcast via abstraction layer.
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class ReferenceDataCacheService {
 
-    private final StringRedisTemplate redisTemplate;
+    private final DistributedCacheService distributedCacheService;
     private final ObjectMapper objectMapper;
 
     @Value("${cache.reference-data.enabled:true}")
@@ -48,11 +49,11 @@ public class ReferenceDataCacheService {
 
         try {
             String cacheKey = securityKeyPrefix + securityId;
-            String cachedJson = redisTemplate.opsForValue().get(cacheKey);
+            Optional<String> cachedJsonOpt = distributedCacheService.get(cacheKey);
             
-            if (cachedJson != null) {
+            if (cachedJsonOpt.isPresent()) {
                 @SuppressWarnings("unchecked")
-                Map<String, Object> securityData = objectMapper.readValue(cachedJson, Map.class);
+                Map<String, Object> securityData = objectMapper.readValue(cachedJsonOpt.get(), Map.class);
                 log.debug("Cache hit for security: {}", securityId);
                 return Optional.of(securityData);
             }
@@ -76,7 +77,7 @@ public class ReferenceDataCacheService {
         try {
             String cacheKey = securityKeyPrefix + securityId;
             String securityJson = objectMapper.writeValueAsString(securityData);
-            redisTemplate.opsForValue().set(cacheKey, securityJson, Duration.ofSeconds(securityTtlSeconds));
+            distributedCacheService.set(cacheKey, securityJson, Duration.ofSeconds(securityTtlSeconds));
             log.debug("Cached security: {}", securityId);
         } catch (Exception e) {
             log.warn("Error caching security: {}", securityId, e);
@@ -94,11 +95,11 @@ public class ReferenceDataCacheService {
 
         try {
             String cacheKey = accountKeyPrefix + accountId + ":" + bookId;
-            String cachedJson = redisTemplate.opsForValue().get(cacheKey);
+            Optional<String> cachedJsonOpt = distributedCacheService.get(cacheKey);
             
-            if (cachedJson != null) {
+            if (cachedJsonOpt.isPresent()) {
                 @SuppressWarnings("unchecked")
-                Map<String, Object> accountData = objectMapper.readValue(cachedJson, Map.class);
+                Map<String, Object> accountData = objectMapper.readValue(cachedJsonOpt.get(), Map.class);
                 log.debug("Cache hit for account: {} / {}", accountId, bookId);
                 return Optional.of(accountData);
             }
@@ -122,7 +123,7 @@ public class ReferenceDataCacheService {
         try {
             String cacheKey = accountKeyPrefix + accountId + ":" + bookId;
             String accountJson = objectMapper.writeValueAsString(accountData);
-            redisTemplate.opsForValue().set(cacheKey, accountJson, Duration.ofSeconds(accountTtlSeconds));
+            distributedCacheService.set(cacheKey, accountJson, Duration.ofSeconds(accountTtlSeconds));
             log.debug("Cached account: {} / {}", accountId, bookId);
         } catch (Exception e) {
             log.warn("Error caching account: {} / {}", accountId, bookId, e);
@@ -140,7 +141,7 @@ public class ReferenceDataCacheService {
 
         try {
             String cacheKey = securityKeyPrefix + securityId;
-            redisTemplate.delete(cacheKey);
+            distributedCacheService.delete(cacheKey);
             log.debug("Evicted security from cache: {}", securityId);
         } catch (Exception e) {
             log.warn("Error evicting security from cache: {}", securityId, e);
@@ -157,7 +158,7 @@ public class ReferenceDataCacheService {
 
         try {
             String cacheKey = accountKeyPrefix + accountId + ":" + bookId;
-            redisTemplate.delete(cacheKey);
+            distributedCacheService.delete(cacheKey);
             log.debug("Evicted account from cache: {} / {}", accountId, bookId);
         } catch (Exception e) {
             log.warn("Error evicting account from cache: {} / {}", accountId, bookId, e);
