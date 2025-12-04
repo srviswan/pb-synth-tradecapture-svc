@@ -1,0 +1,68 @@
+{
+  "jobId": "e9f94705-9030-4def-8de2-407a516af0bb",
+  "status": "COMPLETED",
+  "progress": 100,
+  "message": "Trade processing completed",
+  "result": {
+    "tradeId": "SOLACE-E2E-TRADE-1764815241-AUTO",
+    "status": "SUCCESS",
+    "swapBlotter": {
+      "tradeId": "SOLACE-E2E-TRADE-1764815241-AUTO",
+      "partitionKey": "ACC-SOLACE-001_BOOK-SOLACE-001_US0378331005",
+      "tradeLots": [
+        {
+          "lotIdentifier": [
+            {
+              "identifier": "LOT-SOLACE-001",
+              "identifierType": "INTERNAL"
+            }
+          ],
+          "priceQuantity": [
+            {
+              "quantity": [
+                {
+                  "value": 10000.0,
+                  "unit": {
+                    "currency": "null",
+                    "financialUnit": "Shares"
+                  }
+                }
+              ],
+              "price": [
+                {
+                  "value": 150.25,
+                  "unit": {
+                    "currency": "USD",
+                    "financialUnit": "null"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "contract": null,
+      "state": {
+        "positionState": "FORMED",
+        "closedState": null
+      },
+      "enrichmentStatus": "COMPLETE",
+      "workflowStatus": "APPROVED",
+      "processingMetadata": {
+        "processedAt": "2025-12-04T02:27:21.850390336Z",
+        "processingTimeMs": 39,
+        "rulesApplied": [],
+        "enrichmentSources": [
+          "SecurityMasterService",
+          "AccountService"
+        ]
+      },
+      "version": 0
+    },
+    "error": null
+  },
+  "error": null,
+  "createdAt": "2025-12-04T02:27:21.824814836Z",
+  "updatedAt": "2025-12-04T02:27:21.868546253Z",
+  "estimatedCompletionTime": "2025-12-04T02:27:21.868548419Z"
+}

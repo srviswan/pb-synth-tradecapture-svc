@@ -1,0 +1,6 @@
+{
+  "status": "ACCEPTED",
+  "jobId": "e9f94705-9030-4def-8de2-407a516af0bb",
+  "message": "Trade submitted for processing",
+  "statusUrl": "/api/v1/trades/jobs/e9f94705-9030-4def-8de2-407a516af0bb/status"
+}

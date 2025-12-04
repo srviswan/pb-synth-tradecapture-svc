@@ -109,9 +109,12 @@ public class TradeCaptureService {
                         log.debug("Sequence validation disabled - continuing with normal processing: tradeId={}", request.getTradeId());
                         // Continue with normal processing
                     } else {
+                        Long expectedSeq = bufferResult.getExpectedSequence();
+                        Long receivedSeq = bufferResult.getReceivedSequence();
                         log.warn("Message not processed due to sequence validation: tradeId={}, reason={}, expected={}, received={}", 
                             request.getTradeId(), reason, 
-                            bufferResult.getExpectedSequence(), bufferResult.getReceivedSequence());
+                            expectedSeq != null ? expectedSeq : "N/A", 
+                            receivedSeq != null ? receivedSeq : "N/A");
                         
                         if ("BUFFERED".equals(reason) || "BUFFERED_EARLIER".equals(reason)) {
                             // Message is buffered - return pending response
@@ -126,8 +129,10 @@ public class TradeCaptureService {
                                 .status("REJECTED")
                                 .error(ErrorDetail.builder()
                                     .code("SEQUENCE_VALIDATION_FAILED")
-                                    .message(String.format("Sequence validation failed: %s (expected: %d, received: %d)", 
-                                        reason, bufferResult.getExpectedSequence(), bufferResult.getReceivedSequence()))
+                                    .message(String.format("Sequence validation failed: %s (expected: %s, received: %s)", 
+                                        reason, 
+                                        bufferResult.getExpectedSequence() != null ? String.valueOf(bufferResult.getExpectedSequence()) : "N/A",
+                                        bufferResult.getReceivedSequence() != null ? String.valueOf(bufferResult.getReceivedSequence()) : "N/A"))
                                     .timestamp(ZonedDateTime.now())
                                     .build())
                                 .build();

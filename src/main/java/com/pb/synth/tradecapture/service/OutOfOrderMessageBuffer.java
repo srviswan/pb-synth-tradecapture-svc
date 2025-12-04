@@ -360,6 +360,8 @@ public class OutOfOrderMessageBuffer {
 
     @lombok.Data
     @lombok.Builder
+    @lombok.NoArgsConstructor
+    @lombok.AllArgsConstructor
     public static class BufferResult {
         private boolean shouldProcess;
         private TradeCaptureRequest request;
@@ -367,6 +369,15 @@ public class OutOfOrderMessageBuffer {
         private Long expectedSequence;
         private Long receivedSequence;
         private Long gap;
+        
+        // Explicit getters to ensure they're available during compilation
+        public Long getExpectedSequence() {
+            return expectedSequence;
+        }
+        
+        public Long getReceivedSequence() {
+            return receivedSequence;
+        }
     }
 
     @lombok.Data

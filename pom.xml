@@ -104,6 +104,20 @@
             <artifactId>spring-kafka</artifactId>
         </dependency>
 
+        <!-- Solace JMS API for PubSub+ messaging -->
+        <dependency>
+            <groupId>com.solacesystems</groupId>
+            <artifactId>sol-jms</artifactId>
+            <version>10.23.0</version>
+        </dependency>
+        
+        <!-- Jakarta JMS API (required for Solace JMS) -->
+        <dependency>
+            <groupId>jakarta.jms</groupId>
+            <artifactId>jakarta.jms-api</artifactId>
+            <version>3.1.0</version>
+        </dependency>
+
         <!-- Resilience4j for circuit breakers, retries, etc. -->
         <dependency>
             <groupId>io.github.resilience4j</groupId>
@@ -285,6 +299,8 @@
                     <compilerArgs>
                         <arg>-parameters</arg>
                     </compilerArgs>
+                    <proc>full</proc>
+                    <generatedSourcesDirectory>${project.build.directory}/generated-sources/annotations</generatedSourcesDirectory>
                 </configuration>
             </plugin>
 

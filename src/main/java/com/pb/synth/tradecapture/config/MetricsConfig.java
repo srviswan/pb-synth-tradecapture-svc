@@ -42,6 +42,11 @@ public class MetricsConfig {
     private Counter idempotencyCacheMissCounter;
     private Counter partitionLockAcquiredCounter;
     private Counter partitionLockTimeoutCounter;
+    
+    // Solace router counters
+    private Counter routerMessagesRoutedCounter;
+    private Counter routerRoutingFailuresCounter;
+    private Counter routerPartitionsCreatedCounter;
 
     // Custom timers
     private Timer tradeProcessingTimer;
@@ -50,6 +55,7 @@ public class MetricsConfig {
     private Timer partitionLockAcquisitionTimer;
     private Timer idempotencyCheckTimer;
     private Timer databaseQueryTimer;
+    private Timer routerRoutingTimer;
 
     // Gauges for connection pool
     private final AtomicInteger activeConnections = new AtomicInteger(0);
@@ -138,6 +144,22 @@ public class MetricsConfig {
                 .tag("service", "trade-capture")
                 .register(meterRegistry);
 
+        // Solace router counters
+        routerMessagesRoutedCounter = Counter.builder("solace.router.messages.routed")
+                .description("Number of messages routed to partition topics")
+                .tag("service", "trade-capture")
+                .register(meterRegistry);
+
+        routerRoutingFailuresCounter = Counter.builder("solace.router.routing.failures")
+                .description("Number of routing failures")
+                .tag("service", "trade-capture")
+                .register(meterRegistry);
+
+        routerPartitionsCreatedCounter = Counter.builder("solace.router.partitions.created")
+                .description("Number of partition topics created")
+                .tag("service", "trade-capture")
+                .register(meterRegistry);
+
         // Timers
         tradeProcessingTimer = Timer.builder("trades.processing.time")
                 .description("Time taken to process a trade")
@@ -166,6 +188,11 @@ public class MetricsConfig {
 
         databaseQueryTimer = Timer.builder("database.query.time")
                 .description("Time taken for database queries")
+                .tag("service", "trade-capture")
+                .register(meterRegistry);
+
+        routerRoutingTimer = Timer.builder("solace.router.routing.time")
+                .description("Time taken to route message to partition topic")
                 .tag("service", "trade-capture")
                 .register(meterRegistry);
 
@@ -266,6 +293,22 @@ public class MetricsConfig {
 
     public Timer getDatabaseQueryTimer() {
         return databaseQueryTimer;
+    }
+
+    public Counter getRouterMessagesRoutedCounter() {
+        return routerMessagesRoutedCounter;
+    }
+
+    public Counter getRouterRoutingFailuresCounter() {
+        return routerRoutingFailuresCounter;
+    }
+
+    public Counter getRouterPartitionsCreatedCounter() {
+        return routerPartitionsCreatedCounter;
+    }
+
+    public Timer getRouterRoutingTimer() {
+        return routerRoutingTimer;
     }
 
     /**

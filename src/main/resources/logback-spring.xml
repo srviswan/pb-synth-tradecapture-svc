@@ -2,8 +2,21 @@
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-    <!-- JSON encoder for structured logging -->
-    <springProfile name="!test">
+    <!-- Colored console logging for development/local -->
+    <springProfile name="dev,local">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight([%thread]) %highlight(%-5level) %cyan([%X{correlationId}]) %cyan([%X{tradeId}]) %yellow(%logger{36}) - %highlight(%msg)%n</pattern>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- JSON encoder for structured logging (production) -->
+    <springProfile name="prod,production">
         <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
                 <providers>
@@ -40,11 +53,24 @@
         </root>
     </springProfile>
 
-    <!-- Standard console logging for test profile -->
+    <!-- Colored console logging for default profile (when no profile specified) -->
+    <springProfile name="!prod,!production,!test">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight([%thread]) %highlight(%-5level) %cyan([%X{correlationId}]) %cyan([%X{tradeId}]) %yellow(%logger{36}) - %highlight(%msg)%n</pattern>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- Colored console logging for test profile -->
     <springProfile name="test">
         <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
             <encoder>
-                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] [%X{tradeId}] %logger{36} - %msg%n</pattern>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight([%thread]) %highlight(%-5level) %cyan([%X{correlationId}]) %cyan([%X{tradeId}]) %yellow(%logger{36}) - %highlight(%msg)%n</pattern>
             </encoder>
         </appender>
 

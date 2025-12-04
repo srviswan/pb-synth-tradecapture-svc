@@ -256,6 +256,28 @@ messaging:
     password: ${SOLACE_PASSWORD:default}
     connection-pool-size: ${SOLACE_CONNECTION_POOL_SIZE:5}
     consumer-threads: ${SOLACE_CONSUMER_THREADS:3}
+    # Topic configuration for partition-based routing
+    topics:
+      # Single input topic from upstream
+      input: ${SOLACE_INPUT_TOPIC:trade/capture/input}
+      # Partition-specific topic pattern (router will create these)
+      partition-pattern: ${SOLACE_PARTITION_PATTERN:trade/capture/input/{partitionKey}}
+      # Output topic pattern (partition-specific)
+      output-pattern: ${SOLACE_OUTPUT_PATTERN:trade/capture/blotter/{partitionKey}}
+      # DLQ topics
+      router-dlq: ${SOLACE_ROUTER_DLQ:trade/capture/router/dlq}
+      dlq: ${SOLACE_DLQ:trade/capture/dlq}
+    # Router configuration (consumes from input, routes to partition topics)
+    router:
+      enabled: ${SOLACE_ROUTER_ENABLED:true}
+      consumer-threads: ${SOLACE_ROUTER_THREADS:3}
+      max-retries: ${SOLACE_ROUTER_MAX_RETRIES:3}
+    # Consumer configuration (consumes from partition-specific topics)
+    consumer:
+      # Wildcard pattern to subscribe to all partition topics
+      topic-pattern: ${SOLACE_CONSUMER_TOPIC_PATTERN:trade/capture/input/>}
+      consumer-threads: ${SOLACE_CONSUMER_THREADS:3}
+    # Legacy queue configuration (for backward compatibility)
     queues:
       input: trade/capture/input
       output: trade/capture/blotter

@@ -1,19 +1,23 @@
 package com.pb.synth.tradecapture.service;
 
 import com.pb.synth.tradecapture.messaging.MessageConverter;
+import com.pb.synth.tradecapture.messaging.TradeInputPublisher;
+import com.pb.synth.tradecapture.messaging.TradeInputPublisherFactory;
 import com.pb.synth.tradecapture.model.TradeCaptureRequest;
 import com.pb.synth.tradecapture.proto.TradeCaptureProto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
  * Service for publishing trades to message queue for async processing.
  * This service publishes API-initiated trades to the same queue as message-based input.
+ * 
+ * Uses TradeInputPublisher interface to abstract the underlying messaging implementation
+ * (Kafka, Solace, etc.) from the service layer.
  */
 @Service
 @RequiredArgsConstructor
@@ -21,10 +25,7 @@ import java.util.UUID;
 public class TradePublishingService {
     
     private final MessageConverter messageConverter;
-    private final KafkaTemplate<String, byte[]> kafkaTemplate;
-    
-    @Value("${messaging.kafka.topics.input:trade-capture-input}")
-    private String inputTopic;
+    private final TradeInputPublisherFactory publisherFactory;
     
     /**
      * Publish a single trade to the message queue for async processing.
@@ -58,24 +59,25 @@ public class TradePublishingService {
             
             protoMessage = builder.build();
             
-            // Publish to Kafka with partition key as message key
+            // Extract partition key
             String partitionKey = request.getPartitionKey() != null 
                 ? request.getPartitionKey() 
                 : "unknown";
-            byte[] messageBytes = protoMessage.toByteArray();
             
-            kafkaTemplate.send(inputTopic, partitionKey, messageBytes)
-                .whenComplete((result, exception) -> {
-                    if (exception != null) {
-                        log.error("Error publishing trade to queue: tradeId={}, jobId={}", 
-                            request.getTradeId(), finalJobId, exception);
-                    } else {
-                        log.info("Successfully published trade to queue: tradeId={}, jobId={}, partition={}, offset={}", 
-                            request.getTradeId(), finalJobId,
-                            result.getRecordMetadata().partition(),
-                            result.getRecordMetadata().offset());
-                    }
-                });
+            // Get the configured publisher (abstracts Kafka vs Solace)
+            Optional<TradeInputPublisher> publisherOpt = publisherFactory.getPublisher();
+            
+            if (publisherOpt.isPresent()) {
+                TradeInputPublisher publisher = publisherOpt.get();
+                log.info("Publishing trade via {}: tradeId={}, partitionKey={}", 
+                    publisher.getClass().getSimpleName(), request.getTradeId(), partitionKey);
+                publisher.publish(protoMessage, partitionKey);
+                log.info("Successfully published trade: tradeId={}, jobId={}", 
+                    request.getTradeId(), finalJobId);
+            } else {
+                throw new IllegalStateException(
+                    "No messaging system enabled. Enable either Kafka or Solace.");
+            }
             
             return finalJobId;
             

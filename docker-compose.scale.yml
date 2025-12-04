@@ -39,7 +39,12 @@ services:
       - KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID:-pb-synth-tradecapture-svc-${REGION:-us}}
       - KAFKA_PARTITION_ASSIGNMENT_STRATEGY=${KAFKA_PARTITION_ASSIGNMENT_STRATEGY:-org.apache.kafka.clients.consumer.StickyAssignor}
       - KAFKA_CONSUMER_CONCURRENCY=${KAFKA_CONSUMER_CONCURRENCY:-3}
-      - SOLACE_ENABLED=false
+      - SOLACE_ENABLED=${SOLACE_ENABLED:false}
+      - SOLACE_HOST=${SOLACE_HOST:-solace}
+      - SOLACE_PORT=${SOLACE_PORT:-55555}
+      - SOLACE_VPN=${SOLACE_VPN:-default}
+      - SOLACE_USERNAME=${SOLACE_USERNAME:-admin}
+      - SOLACE_PASSWORD=${SOLACE_PASSWORD:-admin}
       - SECURITY_MASTER_MOCK=true
       - ACCOUNT_SERVICE_MOCK=true
       - APPROVAL_WORKFLOW_MOCK=true
@@ -50,6 +55,8 @@ services:
       redis:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      solace:
         condition: service_healthy
     networks:
       - tradecapture-network
@@ -82,7 +89,12 @@ services:
       - KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID:-pb-synth-tradecapture-svc-${REGION:-us}}
       - KAFKA_PARTITION_ASSIGNMENT_STRATEGY=${KAFKA_PARTITION_ASSIGNMENT_STRATEGY:-org.apache.kafka.clients.consumer.StickyAssignor}
       - KAFKA_CONSUMER_CONCURRENCY=${KAFKA_CONSUMER_CONCURRENCY:-3}
-      - SOLACE_ENABLED=false
+      - SOLACE_ENABLED=${SOLACE_ENABLED:false}
+      - SOLACE_HOST=${SOLACE_HOST:-solace}
+      - SOLACE_PORT=${SOLACE_PORT:-55555}
+      - SOLACE_VPN=${SOLACE_VPN:-default}
+      - SOLACE_USERNAME=${SOLACE_USERNAME:-admin}
+      - SOLACE_PASSWORD=${SOLACE_PASSWORD:-admin}
       - SECURITY_MASTER_MOCK=true
       - ACCOUNT_SERVICE_MOCK=true
       - APPROVAL_WORKFLOW_MOCK=true
@@ -93,6 +105,8 @@ services:
       redis:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      solace:
         condition: service_healthy
     networks:
       - tradecapture-network
@@ -125,7 +139,12 @@ services:
       - KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID:-pb-synth-tradecapture-svc-${REGION:-us}}
       - KAFKA_PARTITION_ASSIGNMENT_STRATEGY=${KAFKA_PARTITION_ASSIGNMENT_STRATEGY:-org.apache.kafka.clients.consumer.StickyAssignor}
       - KAFKA_CONSUMER_CONCURRENCY=${KAFKA_CONSUMER_CONCURRENCY:-3}
-      - SOLACE_ENABLED=false
+      - SOLACE_ENABLED=${SOLACE_ENABLED:false}
+      - SOLACE_HOST=${SOLACE_HOST:-solace}
+      - SOLACE_PORT=${SOLACE_PORT:-55555}
+      - SOLACE_VPN=${SOLACE_VPN:-default}
+      - SOLACE_USERNAME=${SOLACE_USERNAME:-admin}
+      - SOLACE_PASSWORD=${SOLACE_PASSWORD:-admin}
       - SECURITY_MASTER_MOCK=true
       - ACCOUNT_SERVICE_MOCK=true
       - APPROVAL_WORKFLOW_MOCK=true
@@ -136,6 +155,8 @@ services:
       redis:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      solace:
         condition: service_healthy
     networks:
       - tradecapture-network
@@ -186,6 +207,34 @@ services:
       timeout: 3s
       retries: 5
 
+  solace:
+    image: solace/solace-pubsub-standard:latest
+    container_name: pb-synth-tradecapture-solace
+    environment:
+      - username_admin_globalaccesslevel=admin
+      - username_admin_password=admin
+      - system_scaling_maxconnectioncount=100
+      - system_scaling_maxqueuemessagecount=1000
+    ports:
+      - "8080:8080"    # SEMP (Management API)
+      - "55555:55555"  # SMF (Message Format)
+      - "55003:55003"  # Compressed SMF
+      - "55443:55443"  # Web Transport
+      - "1883:1883"    # MQTT
+      - "8008:8008"    # WebSocket
+      - "9443:9443"    # Secure WebSocket
+    volumes:
+      - solace-data:/var/lib/solace
+    networks:
+      - tradecapture-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/SEMP || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s  # Solace takes time to start
+
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
     container_name: pb-synth-tradecapture-zookeeper
@@ -233,4 +282,5 @@ networks:
 volumes:
   sqlserver-data:
   redis-data:
+  solace-data:
 
