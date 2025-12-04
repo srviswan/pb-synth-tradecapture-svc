@@ -8,10 +8,13 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Hazelcast implementation of distributed locking service.
+ * Uses IMap-based locking with lock value verification to ensure only the owning thread can release locks.
  */
 @Service
 @ConditionalOnProperty(name = "cache.provider", havingValue = "hazelcast", matchIfMissing = false)
@@ -24,6 +27,10 @@ public class HazelcastDistributedLockService implements DistributedLockService {
     private static final String LOCK_PREFIX = "lock:partition:";
     private static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofMinutes(5);
     private static final Duration DEFAULT_LOCK_WAIT = Duration.ofSeconds(30);
+    
+    // Thread-local storage for lock values to verify ownership on release
+    // Key: partitionKey, Value: lockValue used when acquiring the lock
+    private final ThreadLocal<Map<String, String>> threadLockValues = ThreadLocal.withInitial(ConcurrentHashMap::new);
     
     @Override
     public boolean acquireLock(String partitionKey) {
@@ -53,8 +60,10 @@ public class HazelcastDistributedLockService implements DistributedLockService {
             String existing = lockMap.putIfAbsent(lockKey, lockValue);
             
             if (existing == null) {
-                // Lock acquired - set TTL
+                // Lock acquired - set TTL and store lock value for this thread
                 lockMap.setTtl(lockKey, lockTimeout.toMillis(), TimeUnit.MILLISECONDS);
+                // Store the lock value for this thread so we can verify ownership on release
+                threadLockValues.get().put(partitionKey, lockValue);
                 log.debug("Acquired lock for partition: {} after {} attempts", partitionKey, attempt);
                 return true;
             }
@@ -89,18 +98,34 @@ public class HazelcastDistributedLockService implements DistributedLockService {
         String lockKey = LOCK_PREFIX + partitionKey;
         com.hazelcast.map.IMap<String, String> lockMap = hazelcastInstance.getMap("distributed-locks");
         
-        // Only release if we hold the lock (check by value)
-        String lockValue = Thread.currentThread().getName() + "-" + System.currentTimeMillis();
-        String currentValue = lockMap.get(lockKey);
+        // Get the lock value that was used when this thread acquired the lock
+        Map<String, String> threadLocks = threadLockValues.get();
+        String expectedLockValue = threadLocks.get(partitionKey);
         
-        // For simplicity, we'll remove the lock if it exists
-        // In production, you might want to verify the lock value matches
-        String removed = lockMap.remove(lockKey);
+        if (expectedLockValue == null) {
+            log.warn("Attempted to release lock for partition: {} but this thread never acquired it", partitionKey);
+            return;
+        }
         
-        if (removed != null) {
+        // Atomically remove the lock only if the value matches (ensures we own the lock)
+        // This prevents other threads from releasing locks they don't own
+        boolean removed = lockMap.remove(lockKey, expectedLockValue);
+        
+        if (removed) {
+            // Clean up thread-local storage
+            threadLocks.remove(partitionKey);
             log.debug("Released lock for partition: {}", partitionKey);
         } else {
-            log.warn("Lock not found or already released for partition: {}", partitionKey);
+            // Lock value doesn't match - either we don't own it or it was already released
+            String currentValue = lockMap.get(lockKey);
+            if (currentValue == null) {
+                log.warn("Lock not found for partition: {} (may have expired or been released)", partitionKey);
+            } else {
+                log.warn("Lock value mismatch for partition: {} - expected: {}, found: {}. Lock not released.", 
+                    partitionKey, expectedLockValue, currentValue);
+            }
+            // Clean up thread-local storage even if release failed
+            threadLocks.remove(partitionKey);
         }
     }
     
@@ -116,17 +141,36 @@ public class HazelcastDistributedLockService implements DistributedLockService {
         String lockKey = LOCK_PREFIX + partitionKey;
         com.hazelcast.map.IMap<String, String> lockMap = hazelcastInstance.getMap("distributed-locks");
         
-        if (lockMap.containsKey(lockKey)) {
-            // Extend TTL by the additional time
-            long currentTtl = lockMap.getEntryView(lockKey).getTtl();
-            long newTtl = currentTtl + additionalTime.toMillis();
-            lockMap.setTtl(lockKey, newTtl, TimeUnit.MILLISECONDS);
-            log.debug("Extended lock for partition: {} by {}", partitionKey, additionalTime);
-            return true;
+        // Get the lock value that was used when this thread acquired the lock
+        Map<String, String> threadLocks = threadLockValues.get();
+        String expectedLockValue = threadLocks.get(partitionKey);
+        
+        if (expectedLockValue == null) {
+            log.warn("Attempted to extend lock for partition: {} but this thread never acquired it", partitionKey);
+            return false;
         }
         
-        log.warn("Lock not found for partition: {}", partitionKey);
-        return false;
+        // Verify we own the lock before extending
+        String currentValue = lockMap.get(lockKey);
+        if (currentValue == null) {
+            log.warn("Lock not found for partition: {} (may have expired)", partitionKey);
+            threadLocks.remove(partitionKey); // Clean up
+            return false;
+        }
+        
+        if (!expectedLockValue.equals(currentValue)) {
+            log.warn("Lock value mismatch for partition: {} - expected: {}, found: {}. Lock not extended.", 
+                partitionKey, expectedLockValue, currentValue);
+            threadLocks.remove(partitionKey); // Clean up
+            return false;
+        }
+        
+        // Extend TTL by the additional time (we own the lock)
+        long currentTtl = lockMap.getEntryView(lockKey).getTtl();
+        long newTtl = currentTtl + additionalTime.toMillis();
+        lockMap.setTtl(lockKey, newTtl, TimeUnit.MILLISECONDS);
+        log.debug("Extended lock for partition: {} by {}", partitionKey, additionalTime);
+        return true;
     }
 }
 
